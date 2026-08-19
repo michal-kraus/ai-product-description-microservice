@@ -1,0 +1,20 @@
+services:
+  database:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    ports:
+      - "25432:5432"
+    environment:
+      POSTGRES_DB: product_description_db
+      POSTGRES_USER: app_user
+      POSTGRES_PASSWORD: app_password
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+
+  ai_local:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "21434:11434"
+    volumes:
+      - ./ollama_data:/root/.ollama
