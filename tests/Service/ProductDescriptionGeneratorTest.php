@@ -9,7 +9,7 @@ use PHPUnit\Framework\TestCase;
 
 class ProductDescriptionGeneratorTest extends TestCase
 {
-    public function testCanProduceDescriptionWithNameAndFeatures(): void
+    public function testItProducesDescriptionWithGivenNameAndFeatures(): void
     {
         $generator = new ProductDescriptionGenerator();
 
