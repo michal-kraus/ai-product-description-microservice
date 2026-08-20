@@ -7,7 +7,7 @@ use PHPUnit\Framework\TestCase;
 
 class AIClientTest extends TestCase
 {
-    public function testSomething(): void
+    public function testItGeneratesDescription(): void
     {
         $aiClient = new AIClient();
 
