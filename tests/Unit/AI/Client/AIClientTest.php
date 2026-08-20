@@ -13,7 +13,7 @@ class AIClientTest extends TestCase
 {
     public function testItGeneratesDescription(): void
     {
-        $mockJson = json_encode([
+        $mockJson = (string) json_encode([
             'model' => 'qwen2.5:0.5b',
             'response' => 'This is a Test Product description with features Feature 1, Feature 2.',
             'done' => true,
