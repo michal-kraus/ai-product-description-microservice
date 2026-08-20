@@ -11,6 +11,7 @@ class ProductDescriptionGenerator
     public function __construct(private AIClientInterface $aiClient) {}
     public function generate(string $productName, string $productFeatures): string
     {
-        return $this->aiClient->generateDescription($productName, $productFeatures);
+        $description = $this->aiClient->generateDescription($productName, $productFeatures)->getDescription();
+        return $description;
     }
 }

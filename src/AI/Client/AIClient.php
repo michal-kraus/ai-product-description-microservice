@@ -5,14 +5,25 @@ declare(strict_types=1);
 namespace App\AI\Client;
 
 use App\AI\Client\AIClientInterface;
+use App\AI\DTO\AIRequest;
+use App\AI\DTO\AIResponse;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class AIClient implements AIClientInterface
 {
-
-    public function generateDescription(string $productName, string $productFeatures): string
+    public function __construct(
+        private HttpClientInterface $httpClient,
+        private string $ollamaUrl = 'http://127.0.0.1:21434'
+    ) {}
+    public function generateDescription(string $productName, string $productFeatures): AIResponse
     {
-        // Implement the logic to generate a product description using AI.
-        // This is a placeholder implementation. You can replace it with actual AI logic.
-        return "Introducing our latest product: $productName! It comes with amazing features such as $productFeatures. Get yours today!";
+        $AIRequest = new AIRequest('qwen2.5:0.5b', $productName, $productFeatures);
+        $json = $AIRequest->createRequest();
+
+        $response = $this->httpClient->request('POST', "{$this->ollamaUrl}/api/generate", [
+            'json' => $json,
+        ]);
+        $data = $response->toArray();
+        return new AIResponse((string) ($data['response'] ?? ''));
     }
 }
