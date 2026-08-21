@@ -7,7 +7,7 @@ namespace App\Tests\Unit\Service;
 use App\AI\Client\AIClientInterface;
 use App\AI\DTO\AIResponse;
 use App\Service\ProductDescriptionGenerator;
-
+use App\AI\DTO\DescriptionRequest;
 use PHPUnit\Framework\TestCase;
 
 class ProductDescriptionGeneratorTest extends TestCase
@@ -17,7 +17,7 @@ class ProductDescriptionGeneratorTest extends TestCase
         $aiClient = $this->createMock(AIClientInterface::class);
         $aiClient->expects($this->once())
             ->method('generateDescription')
-            ->with('Test Product', 'Feature 1, Feature 2')
+            ->with(new DescriptionRequest('Test Product', 'Feature 1, Feature 2'))
             ->willReturn(new AIResponse('Introducing our latest product: Test Product! It comes with amazing features such as Feature 1, Feature 2. Get yours today!'));
 
         $generator = new ProductDescriptionGenerator($aiClient);

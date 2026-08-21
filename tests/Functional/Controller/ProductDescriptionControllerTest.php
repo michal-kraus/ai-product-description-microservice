@@ -8,6 +8,7 @@ use App\AI\Client\AIClientInterface;
 use App\AI\DTO\AIResponse;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use App\AI\DTO\DescriptionRequest;
 
 final class ProductDescriptionControllerTest extends WebTestCase
 {
@@ -23,7 +24,7 @@ final class ProductDescriptionControllerTest extends WebTestCase
         $aiClientMock = $this->createMock(AIClientInterface::class);
         $aiClientMock->expects($this->once())
             ->method('generateDescription')
-            ->with($expectedName, $expectedFeatures)
+            ->with(new DescriptionRequest($expectedName, $expectedFeatures))
             ->willReturn(new AIResponse($mockedOutput));
 
         static::getContainer()->set(AIClientInterface::class, $aiClientMock);

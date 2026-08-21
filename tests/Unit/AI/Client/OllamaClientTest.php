@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace App\Tests\Unit\AI\Client;
 
 use App\AI\Client\AIClient;
+use App\AI\Client\OllamaClient;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
+use App\AI\DTO\DescriptionRequest;
 
-class AIClientTest extends TestCase
+class OllamaClientTest extends TestCase
 {
     public function testItGeneratesDescription(): void
     {
@@ -25,9 +27,9 @@ class AIClientTest extends TestCase
         ]);
         $httpClient = new MockHttpClient($mockResponse);
 
-        $aiClient = new AIClient($httpClient, 'http://127.0.0.1:21434');
+        $ollamaClient = new OllamaClient($httpClient, 'http://127.0.0.1:21434');
 
-        $description = $aiClient->generateDescription('Test Product', 'Feature 1, Feature 2')->getDescription();
+        $description = $ollamaClient->generateDescription(new DescriptionRequest('Test Product', 'Feature 1, Feature 2'))->description;
         $this->assertSame('This is a Test Product description with features Feature 1, Feature 2.', $description);
     }
 }

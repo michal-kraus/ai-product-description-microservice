@@ -6,10 +6,5 @@ namespace App\AI\DTO;
 
 final readonly class AIResponse
 {
-    public function __construct(private string $description) {}
-
-    public function getDescription(): string
-    {
-        return $this->description;
-    }
+    public function __construct(public string $description) {}
 }
