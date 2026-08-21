@@ -24,6 +24,11 @@
 /var/log/*
 !var/log/.gitkeep
 
+# Local env files
+.env.local
+.env.*.local
+.env.local.php
+
 # Parameters
 /app/config/parameters.yml
 /app/config/parameters.ini
