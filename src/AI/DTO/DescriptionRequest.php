@@ -7,7 +7,7 @@ namespace App\AI\DTO;
 readonly class DescriptionRequest
 {
     public string $prompt;
-    public function __construct(private string $productName, private string $productFeatures)
+    public function __construct(public string $productName, public string $productFeatures)
     {
         $this->prompt = $this->prompt();
     }
@@ -18,6 +18,6 @@ readonly class DescriptionRequest
             Jesteś copywriterem e-commerce. Napisz krótki i atrakcyjny opis produktu po polsku:
             Nazwa: {$this->productName}
             Cechy: {$this->productFeatures}
-        PROMPT;
+            PROMPT;
     }
 }
