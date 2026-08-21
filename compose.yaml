@@ -18,3 +18,8 @@ services:
       - "21434:11434"
     volumes:
       - ./ollama_data:/root/.ollama
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"

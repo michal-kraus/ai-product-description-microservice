@@ -7,6 +7,7 @@
         "php": ">=8.5",
         "ext-ctype": "*",
         "ext-iconv": "*",
+        "predis/predis": "^3.6",
         "symfony/cache": "8.1.*",
         "symfony/console": "8.1.*",
         "symfony/dotenv": "8.1.*",
