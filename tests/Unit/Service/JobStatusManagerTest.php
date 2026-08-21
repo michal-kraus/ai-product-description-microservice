@@ -1,0 +1,60 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Unit\Service;
+
+use App\Enum\GenerateProductDescriptionMessageStatus;
+use App\Service\JobStatusManager;
+use PHPUnit\Framework\TestCase;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
+
+class JobStatusManagerTest extends TestCase
+{
+    private ArrayAdapter $cache;
+    private JobStatusManager $manager;
+
+    protected function setUp(): void
+    {
+        $this->cache = new ArrayAdapter();
+        $this->manager = new JobStatusManager($this->cache, 3600);
+    }
+
+    public function testItCreatesJobWithCreatedStatusAndTimestamp(): void
+    {
+        $jobId = 'job-123';
+        $this->manager->createJob($jobId);
+
+        $jobData = $this->manager->getJob($jobId);
+
+        $this->assertNotNull($jobData);
+        $this->assertSame(GenerateProductDescriptionMessageStatus::CREATED->value, $jobData['status']);
+        $this->assertArrayHasKey('created_at', $jobData);
+    }
+
+    public function testItUpdatesJobAndPreservesCreatedAt(): void
+    {
+        $jobId = 'job-123';
+        $this->manager->createJob($jobId);
+        $initialJobData = $this->manager->getJob($jobId);
+        $this->assertNotNull($initialJobData);
+        $initialCreatedAt = $initialJobData['created_at'];
+
+        $this->manager->updateJob($jobId, [
+            'status' => GenerateProductDescriptionMessageStatus::COMPLETED->value,
+            'description' => 'Test description',
+        ]);
+
+        $updatedJobData = $this->manager->getJob($jobId);
+        $this->assertNotNull($updatedJobData);
+        $this->assertSame(GenerateProductDescriptionMessageStatus::COMPLETED->value, $updatedJobData['status']);
+        $this->assertSame('Test description', $updatedJobData['description']);
+        $this->assertSame($initialCreatedAt, $updatedJobData['created_at']);
+        $this->assertArrayHasKey('updated_at', $updatedJobData);
+    }
+
+    public function testItReturnsNullForNonExistentJob(): void
+    {
+        $this->assertNull($this->manager->getJob('non-existent-job-id'));
+    }
+}

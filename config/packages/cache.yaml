@@ -18,11 +18,16 @@ framework:
         pools:
             product_description.cache:
                 adapter: cache.adapter.redis
-                default_lifetime: 60
+                default_lifetime: 600
+            messenger.jobs.cache:
+                adapter: cache.adapter.redis
+                default_lifetime: 3600
 
 when@test:
     framework:
         cache:
             pools:
                 product_description.cache:
+                    adapter: cache.adapter.array
+                messenger.jobs.cache:
                     adapter: cache.adapter.array

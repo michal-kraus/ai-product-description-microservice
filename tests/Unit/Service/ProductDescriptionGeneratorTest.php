@@ -6,25 +6,33 @@ namespace App\Tests\Unit\Service;
 
 use App\AI\Client\AIClientInterface;
 use App\AI\DTO\AIResponse;
-use App\Service\ProductDescriptionGenerator;
 use App\AI\DTO\DescriptionRequest;
+use App\AI\Prompt\PromptBuilder;
+use App\Service\ProductDescriptionGenerator;
+use App\Tests\Fixtures\ProductDataProvider;
+use PHPUnit\Framework\Attributes\DataProviderExternal;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 class ProductDescriptionGeneratorTest extends TestCase
 {
-    public function testItProducesDescriptionWithGivenNameAndFeatures(): void
-    {
+    #[DataProviderExternal(ProductDataProvider::class, 'providePayloads')]
+    public function testItProducesDescriptionWithGivenNameAndFeatures(
+        string $expectedName,
+        string $expectedFeatures,
+        string $mockedOutput
+    ): void {
         $aiClient = $this->createMock(AIClientInterface::class);
         $aiClient->expects($this->once())
             ->method('generateDescription')
-            ->with(new DescriptionRequest('Test Product', 'Feature 1, Feature 2'))
-            ->willReturn(new AIResponse('Introducing our latest product: Test Product! It comes with amazing features such as Feature 1, Feature 2. Get yours today!'));
+            ->with(new DescriptionRequest($expectedName, $expectedFeatures))
+            ->willReturn(new AIResponse($mockedOutput));
 
-        $generator = new ProductDescriptionGenerator($aiClient, new ArrayAdapter());
+        $generator = new ProductDescriptionGenerator($aiClient, new ArrayAdapter(), new PromptBuilder());
 
-        $description = $generator->generate('Test Product', 'Feature 1, Feature 2');
-        $this->assertStringContainsString('Test Product', $description);
-        $this->assertStringContainsString('Feature 1, Feature 2', $description);
+        $description = $generator->generate($expectedName, $expectedFeatures);
+        $this->assertStringContainsString($expectedName, $description);
+        $this->assertStringContainsString($expectedFeatures, $description);
+        $this->assertSame($mockedOutput, $description);
     }
 }
