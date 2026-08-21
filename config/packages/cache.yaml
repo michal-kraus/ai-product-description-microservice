@@ -15,5 +15,14 @@ framework:
         #app: cache.adapter.apcu
 
         # Namespaced pools use the above "app" backend by default
-        #pools:
-            #my.dedicated.cache: null
+        pools:
+            product_description.cache:
+                adapter: cache.adapter.redis
+                default_lifetime: 60
+
+when@test:
+    framework:
+        cache:
+            pools:
+                product_description.cache:
+                    adapter: cache.adapter.array

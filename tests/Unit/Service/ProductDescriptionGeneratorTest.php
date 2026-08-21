@@ -9,6 +9,7 @@ use App\AI\DTO\AIResponse;
 use App\Service\ProductDescriptionGenerator;
 use App\AI\DTO\DescriptionRequest;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 class ProductDescriptionGeneratorTest extends TestCase
 {
@@ -20,7 +21,7 @@ class ProductDescriptionGeneratorTest extends TestCase
             ->with(new DescriptionRequest('Test Product', 'Feature 1, Feature 2'))
             ->willReturn(new AIResponse('Introducing our latest product: Test Product! It comes with amazing features such as Feature 1, Feature 2. Get yours today!'));
 
-        $generator = new ProductDescriptionGenerator($aiClient);
+        $generator = new ProductDescriptionGenerator($aiClient, new ArrayAdapter());
 
         $description = $generator->generate('Test Product', 'Feature 1, Feature 2');
         $this->assertStringContainsString('Test Product', $description);

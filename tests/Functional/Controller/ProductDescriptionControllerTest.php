@@ -9,6 +9,8 @@ use App\AI\DTO\AIResponse;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use App\AI\DTO\DescriptionRequest;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
+use Symfony\Contracts\Cache\CacheInterface;
 
 final class ProductDescriptionControllerTest extends WebTestCase
 {
@@ -28,6 +30,7 @@ final class ProductDescriptionControllerTest extends WebTestCase
             ->willReturn(new AIResponse($mockedOutput));
 
         static::getContainer()->set(AIClientInterface::class, $aiClientMock);
+        // static::getContainer()->set(CacheInterface::class, new ArrayAdapter());
 
         $client->request('POST', '/product/description', $payload);
 
