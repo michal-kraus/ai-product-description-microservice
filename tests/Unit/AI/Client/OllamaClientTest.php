@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Tests\Unit\AI\Client;
 
-use App\AI\Client\AIClient;
 use App\AI\Client\OllamaClient;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpClient\MockHttpClient;
