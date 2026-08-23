@@ -30,6 +30,9 @@ class JobStatusManager
         $this->messengerJobsCache->save($item);
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     public function updateJob(string $jobId, array $data): void
     {
         $item = $this->messengerJobsCache->getItem(self::KEY_PREFIX . $jobId);
@@ -43,6 +46,9 @@ class JobStatusManager
         $this->messengerJobsCache->save($item);
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
     public function getJob(string $jobId): ?array
     {
         $item = $this->messengerJobsCache->getItem(self::KEY_PREFIX . $jobId);

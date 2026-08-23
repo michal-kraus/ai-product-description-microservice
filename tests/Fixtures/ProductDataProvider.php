@@ -6,6 +6,9 @@ namespace App\Tests\Fixtures;
 
 final class ProductDataProvider
 {
+    /**
+     * @return iterable<string, array{expectedName: string, expectedFeatures: string, mockedOutput: string}>
+     */
     public static function providePayloads(): iterable
     {
         yield 'with custom parameters' => [
