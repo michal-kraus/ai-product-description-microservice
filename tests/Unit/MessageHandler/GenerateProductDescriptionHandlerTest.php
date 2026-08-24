@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Unit\MessageHandler;
 
+use App\Exception\ProductDescriptionGenerationException;
 use App\Message\GenerateProductDescriptionMessage;
 use App\MessageHandler\GenerateProductDescriptionMessageHandler;
 use App\Service\JobStatusManager;
@@ -16,11 +17,18 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 class GenerateProductDescriptionHandlerTest extends TestCase
 {
+    private JobStatusManager $jobStatusManager;
+
+    protected function setUp(): void
+    {
+        $this->jobStatusManager = new JobStatusManager(new ArrayAdapter());
+    }
+
     #[DataProviderExternal(ProductDataProvider::class, 'providePayloads')]
     public function testItProcessesMessageAndSavesResult(
         string $expectedName,
         string $expectedFeatures,
-        string $mockedOutput
+        string $mockedOutput,
     ): void {
         $generator = $this->createMock(ProductDescriptionGenerator::class);
         $generator->expects($this->once())
@@ -28,16 +36,48 @@ class GenerateProductDescriptionHandlerTest extends TestCase
             ->with($expectedName, $expectedFeatures)
             ->willReturn($mockedOutput);
 
-        $jobStatusManager = new JobStatusManager(new ArrayAdapter());
-        $handler = new GenerateProductDescriptionMessageHandler($generator, new NullLogger(), $jobStatusManager);
+        $handler = $this->createHandler($generator);
 
         $jobId = 'job-123';
         $message = new GenerateProductDescriptionMessage($jobId, $expectedName, $expectedFeatures);
         $handler($message);
 
-        $savedData = $jobStatusManager->getJob($jobId);
+        $savedData = $this->jobStatusManager->getJob($jobId);
         $this->assertNotNull($savedData);
         $this->assertSame('completed', $savedData['status']);
         $this->assertSame($mockedOutput, $savedData['description']);
+    }
+
+    public function testItSetsJobStatusToFailedOnGeneratorException(): void
+    {
+        $generator = $this->createStub(ProductDescriptionGenerator::class);
+        $generator->method('generate')
+            ->willThrowException(new ProductDescriptionGenerationException('AI error'));
+
+        $handler = $this->createHandler($generator);
+
+        $jobId = 'job-fail';
+        $message = new GenerateProductDescriptionMessage($jobId, 'Product', 'Features');
+
+        $thrownException = null;
+
+        try {
+            $handler($message);
+        } catch (ProductDescriptionGenerationException $e) {
+            $thrownException = $e;
+        }
+
+        $this->assertNotNull($thrownException, 'Expected ProductDescriptionGenerationException to be thrown by handler.');
+        $this->assertSame('AI error', $thrownException->getMessage());
+
+        $jobData = $this->jobStatusManager->getJob($jobId);
+        $this->assertNotNull($jobData);
+        $this->assertSame('failed', $jobData['status']);
+        $this->assertSame('AI error', $jobData['error']);
+    }
+
+    private function createHandler(ProductDescriptionGenerator $generator): GenerateProductDescriptionMessageHandler
+    {
+        return new GenerateProductDescriptionMessageHandler($generator, new NullLogger(), $this->jobStatusManager);
     }
 }
