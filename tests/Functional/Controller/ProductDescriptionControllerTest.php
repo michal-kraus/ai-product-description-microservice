@@ -7,10 +7,13 @@ namespace App\Tests\Controller;
 use App\AI\Client\AIClientInterface;
 use App\AI\DTO\AIResponse;
 use App\AI\DTO\DescriptionRequest;
+use App\Controller\ProductDescriptionController;
 use App\Enum\GenerateProductDescriptionMessageStatus;
 use App\Service\JobStatusManager;
 use App\Tests\Fixtures\ProductDataProvider;
 use PHPUnit\Framework\Attributes\DataProviderExternal;
+use Psr\Cache\CacheItemPoolInterface;
+use RuntimeException;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
@@ -30,13 +33,18 @@ final class ProductDescriptionControllerTest extends WebTestCase
         $router = static::getContainer()->get('router');
         self::assertInstanceOf(RouterInterface::class, $router);
         $this->router = $router;
+
+        $rateLimiterCache = static::getContainer()->get('rate_limiter.cache');
+        if ($rateLimiterCache instanceof CacheItemPoolInterface) {
+            $rateLimiterCache->clear();
+        }
     }
 
     #[DataProviderExternal(ProductDataProvider::class, 'providePayloads')]
     public function testItGeneratesDescription(
         string $expectedName,
         string $expectedFeatures,
-        string $mockedOutput
+        string $mockedOutput,
     ): void {
         $aiClientMock = $this->createMock(AIClientInterface::class);
         $aiClientMock->expects($this->once())
@@ -63,7 +71,7 @@ final class ProductDescriptionControllerTest extends WebTestCase
     public function testItDispatchesAsyncJobAndReturnsAccepted(
         string $expectedName,
         string $expectedFeatures,
-        string $mockedOutput
+        string $mockedOutput,
     ): void {
         $this->client->request('POST', $this->router->generate('app_product_descriptions_async'), [
             'name' => $expectedName,
@@ -80,7 +88,7 @@ final class ProductDescriptionControllerTest extends WebTestCase
     {
         $this->client->request(
             'GET',
-            $this->router->generate('app_product_descriptions_async_status', ['jobId' => 'non-existent-job-id'])
+            $this->router->generate('app_product_descriptions_async_status', ['jobId' => 'non-existent-job-id']),
         );
         self::assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
     }
@@ -94,7 +102,7 @@ final class ProductDescriptionControllerTest extends WebTestCase
         $jobStatusManager->createJob($jobId);
         $jobStatusManager->updateJob($jobId, [
             'status' => GenerateProductDescriptionMessageStatus::COMPLETED->value,
-            'description' => 'Świetna klawiatura z podświetleniem RGB...',
+            'description' => 'Premium mechanical keyboard with RGB backlighting...',
         ]);
 
         $url = $this->router->generate('app_product_descriptions_async_status', [
@@ -107,7 +115,7 @@ final class ProductDescriptionControllerTest extends WebTestCase
 
         self::assertSame('test-job-999', $response['job_id']);
         self::assertSame(GenerateProductDescriptionMessageStatus::COMPLETED->value, $response['status']);
-        self::assertSame('Świetna klawiatura z podświetleniem RGB...', $response['description']);
+        self::assertSame('Premium mechanical keyboard with RGB backlighting...', $response['description']);
     }
 
     public function testItReturns400WhenParametersAreMissingInSync(): void
@@ -130,5 +138,79 @@ final class ProductDescriptionControllerTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
         $response = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertArrayHasKey('error', $response);
+    }
+
+    public function testItReturns400WhenNameExceedsMaxLength(): void
+    {
+        $longName = str_repeat('a', ProductDescriptionController::MAX_NAME_LENGTH + 1);
+        $this->client->request('POST', $this->router->generate('app_product_descriptions_sync'), [
+            'name' => $longName,
+            'features' => 'Valid features',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $response = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertStringContainsString('too long', $response['error']);
+    }
+
+    public function testItReturns400WhenFeaturesExceedMaxLength(): void
+    {
+        $longFeatures = str_repeat('f', ProductDescriptionController::MAX_FEATURES_LENGTH + 1);
+        $this->client->request('POST', $this->router->generate('app_product_descriptions_async'), [
+            'name' => 'Valid name',
+            'features' => $longFeatures,
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
+        $response = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertStringContainsString('too long', $response['error']);
+    }
+
+    public function testItReturns429WhenRateLimitIsExceeded(): void
+    {
+        // Prevent kernel reboot so rate limiter cache persists between requests
+        $this->client->disableReboot();
+
+        $aiClientMock = $this->createStub(AIClientInterface::class);
+        $aiClientMock->method('generateDescription')
+            ->willReturn(new AIResponse('Description'));
+        static::getContainer()->set(AIClientInterface::class, $aiClientMock);
+
+        $syncUrl = $this->router->generate('app_product_descriptions_sync');
+
+        for ($i = 0; $i < 10; $i++) {
+            $this->client->request('POST', $syncUrl, [
+                'name' => 'Product',
+                'features' => 'Features',
+            ]);
+            self::assertResponseIsSuccessful();
+        }
+
+        $this->client->request('POST', $syncUrl, [
+            'name' => 'Product',
+            'features' => 'Features',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_TOO_MANY_REQUESTS);
+        $response = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertStringContainsString('Too many requests', $response['error']);
+    }
+
+    public function testItReturns500WhenGeneratorFailsInSync(): void
+    {
+        $aiClientMock = $this->createStub(AIClientInterface::class);
+        $aiClientMock->method('generateDescription')
+            ->willThrowException(new RuntimeException('Connection timeout'));
+        static::getContainer()->set(AIClientInterface::class, $aiClientMock);
+
+        $this->client->request('POST', $this->router->generate('app_product_descriptions_sync'), [
+            'name' => 'Failing Product',
+            'features' => 'Some features',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_INTERNAL_SERVER_ERROR);
+        $response = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame('Failed to generate product description.', $response['error']);
+        self::assertArrayHasKey('details', $response);
     }
 }
