@@ -1,0 +1,352 @@
+openapi: 3.1.0
+info:
+  title: Product Description Microservice
+  description: |
+    An asynchronous e-commerce product description generator microservice powered by AI (Ollama / Google Gemini).
+    
+    Supports two operating modes:
+    - **Synchronous** — response directly contains the generated description
+    - **Asynchronous** — returns a `job_id` for background status polling
+  version: 1.0.0
+  contact:
+    name: Michał Kraus
+    url: https://github.com/michal-kraus/ai-product-description-microservice
+    email: musial123@gmail.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Service health check
+      description: |
+        Verifies the availability of required dependencies (Redis, AI provider).
+        Returns `200` when all components are healthy, `503` when any dependency is unavailable.
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: healthy
+                checks:
+                  redis:
+                    healthy: true
+                    details: connected
+                  ai_provider:
+                    healthy: true
+                    details: 'provider: ollama'
+        '503':
+          description: Service is degraded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: degraded
+                checks:
+                  redis:
+                    healthy: false
+                    details: 'Connection refused'
+                  ai_provider:
+                    healthy: true
+                    details: 'provider: ollama'
+
+  /product/descriptions/sync:
+    post:
+      operationId: generateProductDescriptionSync
+      summary: Generate product description (synchronous)
+      description: |
+        Generates an e-commerce product description based on name and features.
+        The response contains the generated copy produced by the AI model.
+        Results are cached in Redis (TTL: 600s).
+      tags:
+        - Product Descriptions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductDescriptionRequest'
+            example:
+              name: Laptop Pro 16
+              features: '16GB RAM, 1TB SSD, 16-inch IPS display'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProductDescriptionRequest'
+      responses:
+        '200':
+          description: Description generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncSuccessResponse'
+              example:
+                description: >-
+                  Laptop Pro 16 is a high-performance portable computer featuring 16GB RAM
+                  and an ultra-fast 1TB SSD. Its 16-inch IPS screen delivers stunning visual
+                  clarity for both productivity and creative workflows.
+        '400':
+          description: Missing or invalid required parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              example:
+                error: 'Missing or empty required parameters: "name" and "features" are required.'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitError'
+              example:
+                error: 'Too many requests. Please try again later.'
+        '500':
+          description: Generation failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationError'
+              example:
+                error: Failed to generate product description.
+                details: 'Connection to Ollama timed out.'
+
+  /product/descriptions/async:
+    post:
+      operationId: generateProductDescriptionAsync
+      summary: Generate product description (asynchronous)
+      description: |
+        Dispatches a product description generation job to the background queue.
+        Returns a `job_id` used to poll the job status.
+        Messages are processed asynchronously via Symfony Messenger (Redis transport).
+      tags:
+        - Product Descriptions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductDescriptionRequest'
+            example:
+              name: Smartphone Galaxy X
+              features: '6.7" AMOLED display, 256GB storage, 108MP camera'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProductDescriptionRequest'
+      responses:
+        '202':
+          description: Job accepted for background processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncAcceptedResponse'
+              example:
+                job_id: 669f1a2b3c4d5
+                status: pending
+        '400':
+          description: Missing or invalid required parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitError'
+              example:
+                error: 'Too many requests. Please try again later.'
+
+  /product/descriptions/async/{jobId}:
+    get:
+      operationId: getProductDescriptionAsyncStatus
+      summary: Check asynchronous job status
+      description: |
+        Retrieves the current status of an asynchronous generation job.
+        
+        State machine: `created` → `pending` → `processing` → `completed` / `failed`
+        
+        When status is `completed`, the `description` field contains the generated marketing copy.
+        When status is `failed`, the `error` field contains the failure reason.
+      tags:
+        - Product Descriptions
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          description: Unique job identifier returned by the async endpoint
+          schema:
+            type: string
+          example: 669f1a2b3c4d5
+      responses:
+        '200':
+          description: Current job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncStatusResponse'
+              examples:
+                completed:
+                  summary: Job completed successfully
+                  value:
+                    job_id: 669f1a2b3c4d5
+                    status: completed
+                    description: >-
+                      Smartphone Galaxy X is a premium flagship featuring a 6.7" AMOLED display
+                      and an advanced 108MP camera delivering high-definition photography.
+                    error: null
+                processing:
+                  summary: Job is currently being processed
+                  value:
+                    job_id: 669f1a2b3c4d5
+                    status: processing
+                    description: null
+                    error: null
+                failed:
+                  summary: Job execution failed
+                  value:
+                    job_id: 669f1a2b3c4d5
+                    status: failed
+                    description: null
+                    error: 'Failed to generate description for product "Smartphone Galaxy X".'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobNotFoundError'
+              example:
+                error: Job not found.
+                job_id: non-existent-id
+
+components:
+  schemas:
+    ProductDescriptionRequest:
+      type: object
+      required:
+        - name
+        - features
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          description: Product name (max 200 characters)
+          example: Laptop Pro 16
+        features:
+          type: string
+          maxLength: 2000
+          description: Product features and specifications (max 2000 characters, comma-separated)
+          example: '16GB RAM, 1TB SSD, 16-inch IPS display'
+
+    SyncSuccessResponse:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Generated product description
+
+    AsyncAcceptedResponse:
+      type: object
+      properties:
+        job_id:
+          type: string
+          description: Unique job identifier
+        status:
+          type: string
+          enum:
+            - pending
+          description: Job status (always `pending` on creation)
+
+    AsyncStatusResponse:
+      type: object
+      properties:
+        job_id:
+          type: string
+          description: Unique job identifier
+        status:
+          type: string
+          enum:
+            - created
+            - pending
+            - processing
+            - completed
+            - failed
+          description: Current job status
+        description:
+          type: string
+          nullable: true
+          description: Generated product description (available when status = completed)
+        error:
+          type: string
+          nullable: true
+          description: Error message details (available when status = failed)
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - degraded
+        checks:
+          type: object
+          properties:
+            redis:
+              $ref: '#/components/schemas/HealthCheck'
+            ai_provider:
+              $ref: '#/components/schemas/HealthCheck'
+
+    HealthCheck:
+      type: object
+      properties:
+        healthy:
+          type: boolean
+        details:
+          type: string
+
+    ValidationError:
+      type: object
+      properties:
+        error:
+          type: string
+
+    RateLimitError:
+      type: object
+      properties:
+        error:
+          type: string
+
+    GenerationError:
+      type: object
+      properties:
+        error:
+          type: string
+        details:
+          type: string
+
+    JobNotFoundError:
+      type: object
+      properties:
+        error:
+          type: string
+        job_id:
+          type: string
+
+tags:
+  - name: Health
+    description: Service health and monitoring endpoints
+  - name: Product Descriptions
+    description: AI-powered product description generation endpoints
