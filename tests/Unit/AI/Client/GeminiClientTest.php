@@ -14,11 +14,14 @@ use Symfony\Component\HttpClient\Response\MockResponse;
 
 class GeminiClientTest extends TestCase
 {
+    private const TEST_API_KEY = 'test-api-key';
+    private const TEST_MODEL = 'gemini-3.1-flash-lite-preview';
+
     #[DataProviderExternal(ProductDataProvider::class, 'providePayloads')]
     public function testItGeneratesDescription(
         string $expectedName,
         string $expectedFeatures,
-        string $mockedOutput
+        string $mockedOutput,
     ): void {
         $mockJson = (string) json_encode([
             'steps' => [
@@ -37,9 +40,43 @@ class GeminiClientTest extends TestCase
         ]);
         $httpClient = new MockHttpClient($mockResponse);
 
-        $geminiClient = new GeminiClient($httpClient, 'test-api-key', 'gemini-3.1-flash-lite-preview');
+        $geminiClient = new GeminiClient($httpClient, self::TEST_API_KEY, self::TEST_MODEL);
 
         $description = $geminiClient->generateDescription(new DescriptionRequest($expectedName, $expectedFeatures))->description;
         $this->assertSame($mockedOutput, $description);
+    }
+
+    public function testItReturnsEmptyDescriptionWhenStepsAreEmpty(): void
+    {
+        $mockJson = (string) json_encode(['steps' => []]);
+        $mockResponse = new MockResponse($mockJson, [
+            'http_code' => 200,
+            'response_headers' => ['Content-Type' => 'application/json'],
+        ]);
+        $httpClient = new MockHttpClient($mockResponse);
+
+        $geminiClient = new GeminiClient($httpClient, self::TEST_API_KEY);
+        $description = $geminiClient->generateDescription(new DescriptionRequest('Test', 'Features'))->description;
+
+        $this->assertSame('', $description);
+    }
+
+    public function testItReturnsEmptyDescriptionWhenNoModelOutputStep(): void
+    {
+        $mockJson = (string) json_encode([
+            'steps' => [
+                ['type' => 'user_input', 'content' => [['text' => 'ignored']]],
+            ],
+        ]);
+        $mockResponse = new MockResponse($mockJson, [
+            'http_code' => 200,
+            'response_headers' => ['Content-Type' => 'application/json'],
+        ]);
+        $httpClient = new MockHttpClient($mockResponse);
+
+        $geminiClient = new GeminiClient($httpClient, self::TEST_API_KEY);
+        $description = $geminiClient->generateDescription(new DescriptionRequest('Test', 'Features'))->description;
+
+        $this->assertSame('', $description);
     }
 }
