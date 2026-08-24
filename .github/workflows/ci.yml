@@ -36,8 +36,8 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-version }}
-          extensions: ctype, iconv, json, mbstring, amqp, redis
-          coverage: none
+          extensions: ctype, iconv, json, mbstring, redis
+          coverage: pcov
           tools: composer:v2
 
       - name: Get Composer cache directory
@@ -64,8 +64,11 @@ jobs:
       - name: Lint Symfony container
         run: php bin/console lint:container
 
+      - name: Check code style (PHP-CS-Fixer)
+        run: vendor/bin/php-cs-fixer fix --dry-run --diff
+
       - name: Run PHPStan static analysis
         run: vendor/bin/phpstan analyse
 
-      - name: Run PHPUnit tests
-        run: vendor/bin/phpunit
+      - name: Run PHPUnit tests with coverage
+        run: vendor/bin/phpunit --coverage-text
