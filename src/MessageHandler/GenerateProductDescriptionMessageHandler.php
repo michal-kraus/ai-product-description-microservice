@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\MessageHandler;
 
 use App\Enum\GenerateProductDescriptionMessageStatus;
@@ -8,6 +10,7 @@ use App\Service\JobStatusManager;
 use App\Service\ProductDescriptionGenerator;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
+use Throwable;
 
 #[AsMessageHandler]
 final class GenerateProductDescriptionMessageHandler
@@ -32,7 +35,7 @@ final class GenerateProductDescriptionMessageHandler
 
         try {
             $description = $this->generator->generate($message->name, $message->features);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->logger->error('Description generation failed.', [
                 'job_id' => $message->jobId,
                 'product' => $message->name,

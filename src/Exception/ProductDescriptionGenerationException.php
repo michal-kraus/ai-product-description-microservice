@@ -4,4 +4,6 @@ declare(strict_types=1);
 
 namespace App\Exception;
 
-class ProductDescriptionGenerationException extends \RuntimeException {}
+use RuntimeException;
+
+class ProductDescriptionGenerationException extends RuntimeException {}

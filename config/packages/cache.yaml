@@ -22,6 +22,9 @@ framework:
             messenger.jobs.cache:
                 adapter: cache.adapter.redis
                 default_lifetime: 3600
+            rate_limiter.cache:
+                adapter: cache.adapter.redis
+                default_lifetime: 3600
 
 when@test:
     framework:
@@ -31,3 +34,5 @@ when@test:
                     adapter: cache.adapter.array
                 messenger.jobs.cache:
                     adapter: cache.adapter.array
+                rate_limiter.cache:
+                    adapter: cache.adapter.filesystem

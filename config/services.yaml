@@ -49,3 +49,11 @@ services:
 
     App\AI\Client\AIClientInterface:
         factory: ['@App\AI\Factory\AIClientFactory', 'create']
+
+    App\Controller\HealthCheckController:
+        arguments:
+            $aiProvider: '%env(AI_PROVIDER)%'
+
+    App\Controller\ProductDescriptionController:
+        arguments:
+            $productDescriptionApiLimiter: '@limiter.product_description_api'

@@ -16,7 +16,7 @@ class JobStatusManager
 
     public function __construct(
         private CacheItemPoolInterface $messengerJobsCache,
-        private int $ttl = self::DEFAULT_TTL
+        private int $ttl = self::DEFAULT_TTL,
     ) {}
 
     public function createJob(string $jobId): void
@@ -57,6 +57,7 @@ class JobStatusManager
         }
 
         $data = $item->get();
-        return is_array($data) ? $data : null;
+
+        return \is_array($data) ? $data : null;
     }
 }
