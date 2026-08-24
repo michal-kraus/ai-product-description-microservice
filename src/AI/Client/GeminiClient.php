@@ -17,7 +17,7 @@ class GeminiClient implements AIClientInterface
         private HttpClientInterface $httpClient,
         private string $apiKey,
         private string $model = 'gemini-3.1-flash-lite-preview',
-        private string $baseUrl = self::DEFAULT_BASE_URL
+        private string $baseUrl = self::DEFAULT_BASE_URL,
     ) {}
 
     public function generateDescription(DescriptionRequest $descriptionRequest): AIResponse

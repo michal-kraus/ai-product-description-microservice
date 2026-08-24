@@ -17,7 +17,7 @@ class OllamaClient implements AIClientInterface
         private string $ollamaUrl = 'http://127.0.0.1:21434',
         private string $model = 'qwen2.5:0.5b',
         private float $temperature = 0.7,
-        private bool $stream = false
+        private bool $stream = false,
     ) {}
 
     public function generateDescription(DescriptionRequest $descriptionRequest): AIResponse

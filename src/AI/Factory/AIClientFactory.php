@@ -14,7 +14,7 @@ class AIClientFactory
     public function __construct(
         private OllamaClient $ollamaClient,
         private GeminiClient $geminiClient,
-        private string $provider = 'ollama'
+        private string $provider = 'ollama',
     ) {}
 
     public function create(): AIClientInterface
@@ -22,9 +22,9 @@ class AIClientFactory
         return match (strtolower($this->provider)) {
             'gemini' => $this->geminiClient,
             'ollama' => $this->ollamaClient,
-            default => throw new InvalidArgumentException(sprintf(
+            default => throw new InvalidArgumentException(\sprintf(
                 'Unsupported AI provider: "%s". Supported providers are "ollama", "gemini".',
-                $this->provider
+                $this->provider,
             )),
         };
     }
