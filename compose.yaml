@@ -1,15 +1,35 @@
 services:
-  database:
-    image: postgres:17-alpine
+  app:
+    build: .
     restart: unless-stopped
     ports:
-      - "25432:5432"
+      - "9000:9000"
     environment:
-      POSTGRES_DB: product_description_db
-      POSTGRES_USER: app_user
-      POSTGRES_PASSWORD: app_password
-    volumes:
-      - ./postgres_data:/var/lib/postgresql/data
+      APP_ENV: prod
+      APP_SECRET: ${APP_SECRET:?Set APP_SECRET in .env.local}
+      REDIS_URL: redis://redis:6379
+      MESSENGER_TRANSPORT_DSN: redis://redis:6379/messages
+      MESSENGER_TRANSPORT_DSN_FAILED: redis://redis:6379/failed_messages
+      OLLAMA_URL: http://ai_local:11434
+    depends_on:
+      - redis
+      - ai_local
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: php bin/console messenger:consume async --time-limit=3600 -vv
+    environment:
+      APP_ENV: prod
+      APP_SECRET: ${APP_SECRET:?Set APP_SECRET in .env.local}
+      REDIS_URL: redis://redis:6379
+      MESSENGER_TRANSPORT_DSN: redis://redis:6379/messages
+      MESSENGER_TRANSPORT_DSN_FAILED: redis://redis:6379/failed_messages
+      OLLAMA_URL: http://ai_local:11434
+    depends_on:
+      - redis
+      - ai_local
+
 
   ai_local:
     image: ollama/ollama:latest
