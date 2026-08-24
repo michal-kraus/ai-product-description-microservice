@@ -20,7 +20,7 @@ class PromptBuilderTest extends TestCase
 
     public function testItBuildsPromptWithCustomTemplate(): void
     {
-        $template = "Custom description for {name} with features: {features}";
+        $template = 'Custom description for {name} with features: {features}';
         $builder = new PromptBuilder($template);
         $prompt = $builder->build('Laptop', '16GB RAM');
 

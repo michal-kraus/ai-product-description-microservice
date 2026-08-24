@@ -12,36 +12,41 @@ use PHPUnit\Framework\TestCase;
 
 class AIClientFactoryTest extends TestCase
 {
+    private OllamaClient $ollamaClient;
+    private GeminiClient $geminiClient;
+
+    protected function setUp(): void
+    {
+        $this->ollamaClient = $this->createStub(OllamaClient::class);
+        $this->geminiClient = $this->createStub(GeminiClient::class);
+    }
+
     public function testItReturnsOllamaClientWhenProviderIsOllama(): void
     {
-        $ollamaClient = $this->createStub(OllamaClient::class);
-        $geminiClient = $this->createStub(GeminiClient::class);
+        $factory = $this->createFactory('ollama');
 
-        $factory = new AIClientFactory($ollamaClient, $geminiClient, 'ollama');
-
-        $this->assertSame($ollamaClient, $factory->create());
+        $this->assertSame($this->ollamaClient, $factory->create());
     }
 
     public function testItReturnsGeminiClientWhenProviderIsGemini(): void
     {
-        $ollamaClient = $this->createStub(OllamaClient::class);
-        $geminiClient = $this->createStub(GeminiClient::class);
+        $factory = $this->createFactory('gemini');
 
-        $factory = new AIClientFactory($ollamaClient, $geminiClient, 'gemini');
-
-        $this->assertSame($geminiClient, $factory->create());
+        $this->assertSame($this->geminiClient, $factory->create());
     }
 
     public function testItThrowsExceptionForUnsupportedProvider(): void
     {
-        $ollamaClient = $this->createStub(OllamaClient::class);
-        $geminiClient = $this->createStub(GeminiClient::class);
-
-        $factory = new AIClientFactory($ollamaClient, $geminiClient, 'unsupported-provider');
+        $factory = $this->createFactory('unsupported-provider');
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Unsupported AI provider: "unsupported-provider"');
 
         $factory->create();
+    }
+
+    private function createFactory(string $provider): AIClientFactory
+    {
+        return new AIClientFactory($this->ollamaClient, $this->geminiClient, $provider);
     }
 }
