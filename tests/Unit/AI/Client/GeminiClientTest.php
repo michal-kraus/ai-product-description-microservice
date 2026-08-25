@@ -9,6 +9,7 @@ use App\AI\DTO\DescriptionRequest;
 use App\Tests\Fixtures\ProductDataProvider;
 use PHPUnit\Framework\Attributes\DataProviderExternal;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
@@ -78,5 +79,57 @@ class GeminiClientTest extends TestCase
         $description = $geminiClient->generateDescription(new DescriptionRequest('Test', 'Features'))->description;
 
         $this->assertSame('', $description);
+    }
+
+    public function testItPingsSuccessfully(): void
+    {
+        $mockResponse = new MockResponse((string) json_encode(['models' => []]), [
+            'http_code' => 200,
+            'response_headers' => ['Content-Type' => 'application/json'],
+        ]);
+        $httpClient = new MockHttpClient($mockResponse);
+
+        $geminiClient = new GeminiClient($httpClient, self::TEST_API_KEY);
+
+        $this->assertTrue($geminiClient->ping());
+    }
+
+    public function testItPingsSuccessfullyWithCustomBaseUrl(): void
+    {
+        $mockResponse = new MockResponse((string) json_encode(['models' => []]), [
+            'http_code' => 200,
+            'response_headers' => ['Content-Type' => 'application/json'],
+        ]);
+        $httpClient = new MockHttpClient($mockResponse);
+
+        $geminiClient = new GeminiClient($httpClient, self::TEST_API_KEY, self::TEST_MODEL, 'https://custom-ai-gateway.example.com/v1beta/models');
+
+        $this->assertTrue($geminiClient->ping());
+    }
+
+    public function testItThrowsWhenApiKeyIsEmptyOnPing(): void
+    {
+        $httpClient = new MockHttpClient();
+        $geminiClient = new GeminiClient($httpClient, '');
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Gemini API key is missing.');
+
+        $geminiClient->ping();
+    }
+
+    public function testItThrowsExceptionWhenPingFailsWithNon200(): void
+    {
+        $mockResponse = new MockResponse('Unauthorized', [
+            'http_code' => 401,
+        ]);
+        $httpClient = new MockHttpClient($mockResponse);
+
+        $geminiClient = new GeminiClient($httpClient, self::TEST_API_KEY);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Gemini API health check returned status code 401');
+
+        $geminiClient->ping();
     }
 }

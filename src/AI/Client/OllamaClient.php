@@ -6,11 +6,13 @@ namespace App\AI\Client;
 
 use App\AI\DTO\AIResponse;
 use App\AI\DTO\DescriptionRequest;
+use RuntimeException;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class OllamaClient implements AIClientInterface
 {
     private const GENERATE_ENDPOINT = '/api/generate';
+    private const VERSION_ENDPOINT = '/api/version';
 
     public function __construct(
         private HttpClientInterface $httpClient,
@@ -38,5 +40,19 @@ class OllamaClient implements AIClientInterface
         $data = $response->toArray();
 
         return new AIResponse((string) ($data['response'] ?? ''));
+    }
+
+    public function ping(): bool
+    {
+        $url = rtrim($this->ollamaUrl, '/') . self::VERSION_ENDPOINT;
+        $response = $this->httpClient->request('GET', $url, [
+            'timeout' => 3.0,
+        ]);
+
+        if ($response->getStatusCode() !== 200) {
+            throw new RuntimeException(\sprintf('Ollama health check returned status code %d.', $response->getStatusCode()));
+        }
+
+        return true;
     }
 }

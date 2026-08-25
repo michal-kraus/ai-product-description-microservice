@@ -68,4 +68,32 @@ class OllamaClientTest extends TestCase
         $this->expectException(Throwable::class);
         $ollamaClient->generateDescription(new DescriptionRequest('Test', 'Features'));
     }
+
+    public function testItPingsSuccessfully(): void
+    {
+        $mockResponse = new MockResponse((string) json_encode(['version' => '0.5.1']), [
+            'http_code' => 200,
+            'response_headers' => ['Content-Type' => 'application/json'],
+        ]);
+        $httpClient = new MockHttpClient($mockResponse);
+
+        $ollamaClient = new OllamaClient($httpClient, self::TEST_OLLAMA_URL);
+
+        $this->assertTrue($ollamaClient->ping());
+    }
+
+    public function testItThrowsExceptionWhenPingFailsWithNon200(): void
+    {
+        $mockResponse = new MockResponse('Service Unavailable', [
+            'http_code' => 503,
+        ]);
+        $httpClient = new MockHttpClient($mockResponse);
+
+        $ollamaClient = new OllamaClient($httpClient, self::TEST_OLLAMA_URL);
+
+        $this->expectException(Throwable::class);
+        $this->expectExceptionMessage('Ollama health check returned status code 503');
+
+        $ollamaClient->ping();
+    }
 }

@@ -242,7 +242,7 @@ make worker
 
 ## 🧪 Testing & Code Quality
 
-The project includes **50 automated tests** (Unit + Functional) with **99.6% code coverage**:
+The project includes **57 automated tests** (Unit + Functional) with **99.6% code coverage**:
 
 ```bash
 make check
@@ -250,8 +250,8 @@ make check
 
 Results:
 * **PHPStan Level 8**: `[OK] No errors` (35 files analyzed)
-* **PHPUnit 13**: `OK (50 tests, 171 assertions)`
-* **Code Coverage**: `99.59% lines covered`
+* **PHPUnit 13**: `OK (57 tests, 189 assertions)`
+* **Code Coverage**: `99.65% lines covered`
 
 ---
 

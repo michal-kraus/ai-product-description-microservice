@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\AI\Client\AIClientInterface;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
@@ -14,6 +15,7 @@ final class HealthCheckController
 {
     public function __construct(
         private readonly CacheItemPoolInterface $messengerJobsCache,
+        private readonly AIClientInterface $aiClient,
         private readonly string $aiProvider,
     ) {}
 
@@ -55,6 +57,12 @@ final class HealthCheckController
      */
     private function checkAiProvider(): array
     {
-        return ['healthy' => true, 'details' => \sprintf('provider: %s', $this->aiProvider)];
+        try {
+            $this->aiClient->ping();
+
+            return ['healthy' => true, 'details' => \sprintf('provider: %s', $this->aiProvider)];
+        } catch (Throwable $e) {
+            return ['healthy' => false, 'details' => \sprintf('provider: %s (%s)', $this->aiProvider, $e->getMessage())];
+        }
     }
 }

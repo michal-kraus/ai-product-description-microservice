@@ -6,6 +6,7 @@ namespace App\AI\Client;
 
 use App\AI\DTO\AIResponse;
 use App\AI\DTO\DescriptionRequest;
+use RuntimeException;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class GeminiClient implements AIClientInterface
@@ -45,5 +46,30 @@ class GeminiClient implements AIClientInterface
         }
 
         return new AIResponse(trim($description));
+    }
+
+    public function ping(): bool
+    {
+        if (trim($this->apiKey) === '') {
+            throw new RuntimeException('Gemini API key is missing.');
+        }
+
+        $pingUrl = str_contains($this->baseUrl, '/interactions')
+            ? str_replace('/interactions', '/models', $this->baseUrl)
+            : $this->baseUrl;
+
+        $response = $this->httpClient->request('GET', $pingUrl, [
+            'headers' => [
+                'x-goog-api-key' => $this->apiKey,
+                'Api-Revision' => self::API_REVISION,
+            ],
+            'timeout' => 3.0,
+        ]);
+
+        if ($response->getStatusCode() !== 200) {
+            throw new RuntimeException(\sprintf('Gemini API health check returned status code %d.', $response->getStatusCode()));
+        }
+
+        return true;
     }
 }

@@ -10,4 +10,6 @@ use App\AI\DTO\DescriptionRequest;
 interface AIClientInterface
 {
     public function generateDescription(DescriptionRequest $descriptionRequest): AIResponse;
+
+    public function ping(): bool;
 }
