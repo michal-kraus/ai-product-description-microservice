@@ -51,7 +51,7 @@ flowchart TD
 
     subgraph Infra ["Infrastruktura & Zewnętrzne API"]
         RedisCache[("Redis (Cache & Rate Limiter)")]
-        RedisQueue[("Redis (Transport kolejkowy)")]
+        Queues[("Message Broker (Kolejka Redis / RabbitMQ AMQP)")]
         OllamaSrv["Ollama Server (Local LLM)"]
         GeminiAPI["Google Gemini API (Cloud LLM)"]
     end
@@ -65,7 +65,7 @@ flowchart TD
     Controller -- "Zlecenie asynchroniczne" --> Bus
     Command -- "Zlecenie asynchroniczne" --> Bus
 
-    Bus --> RedisQueue --> Handler
+    Bus --> Queues --> Handler
     Handler -- "Aktualizacja statusu" --> JobManager
     Handler --> Generator
 
@@ -90,7 +90,7 @@ flowchart TD
 - **DTO (Data Transfer Objects)** — `DescriptionRequest`, `AIResponse` jako niemutowalne (readonly) Value Objects
 - **Builder Pattern** — `PromptBuilder` z dynamicznie konfigurowalnym szablonem promptu
 - **Sliding Window Rate Limiter** — ochrona API (30 req/min) z dedykowaną pulą cache
-- **Async Message Processing** — asynchroniczne przetwarzanie zadań przez Symfony Messenger (Redis transport)
+- **Transport-Agnostic Async Queues** — asynchroniczne kolejki wiadomości przez Symfony Messenger z możliwością wyboru brokera: **Redis** lub **RabbitMQ (AMQP)** wraz ze strategią ponowień (retry strategy) oraz dead-letter handling
 - **Multi-layer Cache** — Redis caching wygenerowanych opisów produktów (TTL: 600s)
 
 ---
@@ -193,7 +193,7 @@ make test        # Uruchamia testy PHPUnit
 make coverage    # Uruchamia testy z tabelą pokrycia kodu (PCOV)
 make stan        # Uruchamia analizę statyczną PHPStan (Level 8)
 make lint        # Waliduje pliki YAML i kontener Dependency Injection
-make up          # Uruchamia kontenery Docker (Redis, Ollama, App, Worker)
+make up          # Uruchamia kontenery Docker (Redis, RabbitMQ, Ollama, App, Worker)
 make down        # Zatrzymuje kontenery Docker
 make worker      # Uruchamia konsumenta wiadomości Messenger (async)
 ```
@@ -203,7 +203,7 @@ make worker      # Uruchamia konsumenta wiadomości Messenger (async)
 ## 🚀 Szybki start (Uruchomienie lokalne)
 
 ### 1. Wymagania
-- PHP 8.5+
+- PHP 8.5+ (z rozszerzeniami `ext-redis` i `ext-amqp`)
 - Composer 2
 - Docker & Docker Compose
 - Rozszerzenie PHP PCOV (opcjonalnie, do raportu code coverage)
@@ -213,6 +213,10 @@ make worker      # Uruchamia konsumenta wiadomości Messenger (async)
 make up
 # lub: docker compose up -d
 ```
+> Uruchomione usługi:
+> - **Redis** na porcie `6379`
+> - **RabbitMQ** na porcie `5672` (Panel zarządzania UI: `http://localhost:15672` — login/hasło: `guest`/`guest`)
+> - **Ollama** na porcie `21434`
 
 ### 3. Pobranie lokalnego modelu AI (Ollama)
 ```bash
@@ -224,6 +228,10 @@ docker compose exec ai_local ollama pull qwen2.5:0.5b
 composer install
 cp .env .env.local
 ```
+
+> **Wybór brokera kolejek**: W pliku `.env.local` ustaw zmienną `MESSENGER_TRANSPORT_DSN`:
+> - **Redis (Domyślnie)**: `redis://localhost:6379/messages`
+> - **RabbitMQ (AMQP)**: `amqp://guest:guest@localhost:5672/%2f/messages` *(dodaj `COMPOSE_PROFILES=rabbitmq` w `.env.local`, aby Docker automatycznie uruchomił kontener RabbitMQ)*
 
 ### 5. Uruchomienie serwera aplikacji
 ```bash
@@ -259,12 +267,12 @@ Wynik:
 
 - **PHP 8.5** — `declare(strict_types=1)`, `readonly` classes, enums, match expressions, constructor promotion
 - **Symfony 8.1** — Framework, Messenger, RateLimiter, Cache, HttpClient, Console, Serializer
-- **Redis** — cache opisów produktów, rate limiter storage, transport kolejkowy Messenger
+- **RabbitMQ & Redis** — transport-agnostic async message queuing przez AMQP/Redis, cache opisów produktów, rate limiter storage
 - **Ollama** — lokalny serwer AI (self-hosted LLM)
 - **Google Gemini API** — chmurowy dostawca modeli LLM
 - **PHPStan (Level 8)** — maksymalny poziom statycznej analizy typów
 - **PHPUnit 13 & PCOV** — zestaw testów jednostkowych i funkcjonalnych z pomiarem pokrycia
-- **Docker & Docker Compose** — konteneryzacja środowiska (multi-stage Alpine PHP-FPM)
+- **Docker & Docker Compose** — konteneryzacja środowiska (multi-stage Alpine PHP-FPM z rozszerzeniami `amqp` i `redis`)
 - **OpenAPI 3.1 & Swagger UI** — standard dokumentacji API
 
 ---

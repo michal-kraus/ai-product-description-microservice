@@ -51,7 +51,7 @@ flowchart TD
 
     subgraph Infra ["Infrastructure & External APIs"]
         RedisCache[("Redis (Cache & Rate Limiter)")]
-        RedisQueue[("Redis (Messenger Transport)")]
+        Queues[("Message Broker (Redis Queue / RabbitMQ AMQP)")]
         OllamaSrv["Ollama Server (Local LLM)"]
         GeminiAPI["Google Gemini API (Cloud LLM)"]
     end
@@ -65,7 +65,7 @@ flowchart TD
     Controller -- "Async Dispatch" --> Bus
     Command -- "Async Dispatch" --> Bus
 
-    Bus --> RedisQueue --> Handler
+    Bus --> Queues --> Handler
     Handler -- "Update Status" --> JobManager
     Handler --> Generator
 
@@ -90,7 +90,7 @@ flowchart TD
 - **DTOs (Data Transfer Objects)** — Immutable `readonly` Value Objects (`DescriptionRequest`, `AIResponse`).
 - **Builder Pattern** — `PromptBuilder` for customizable, decoupled prompt templates.
 - **Sliding Window Rate Limiter** — Sliding window algorithm (30 req/min) with isolated cache storage.
-- **Async Queue Processing** — Non-blocking message dispatch via Symfony Messenger over Redis.
+- **Transport-Agnostic Async Queues** — Non-blocking message dispatch via Symfony Messenger with hot-swappable queue drivers: **Redis** or **RabbitMQ (AMQP)** with automatic retry strategy and dead-letter handling.
 - **Multi-layer Caching** — Intelligent Redis caching of generated descriptions (TTL: 600s).
 
 ---
@@ -193,7 +193,7 @@ make test        # Runs PHPUnit test suite
 make coverage    # Runs PHPUnit with PCOV line coverage table
 make stan        # Runs PHPStan static analysis (Level 8)
 make lint        # Validates YAML files and Dependency Injection container
-make up          # Starts Docker containers (Redis, Ollama, App, Worker)
+make up          # Starts Docker containers (Redis, RabbitMQ, Ollama, App, Worker)
 make down        # Stops Docker containers
 make worker      # Starts Symfony Messenger async queue consumer
 ```
@@ -203,7 +203,7 @@ make worker      # Starts Symfony Messenger async queue consumer
 ## 🚀 Quick Start (Local Setup)
 
 ### 1. Prerequisites
-- PHP 8.5+
+- PHP 8.5+ (with `ext-redis` and `ext-amqp`)
 - Composer 2
 - Docker & Docker Compose
 - PCOV PHP extension (optional, for code coverage reports)
@@ -213,6 +213,10 @@ make worker      # Starts Symfony Messenger async queue consumer
 make up
 # or: docker compose up -d
 ```
+> Services started:
+> - **Redis** on `6379`
+> - **RabbitMQ** on `5672` (Management UI: `http://localhost:15672` — user/pass: `guest`/`guest`)
+> - **Ollama** on `21434`
 
 ### 3. Pull Local AI Model (Ollama)
 ```bash
@@ -224,6 +228,10 @@ docker compose exec ai_local ollama pull qwen2.5:0.5b
 composer install
 cp .env .env.local
 ```
+
+> **Queue Transport Switching**: In `.env.local`, set `MESSENGER_TRANSPORT_DSN`:
+> - **Redis (Default)**: `redis://localhost:6379/messages`
+> - **RabbitMQ (AMQP)**: `amqp://guest:guest@localhost:5672/%2f/messages` *(add `COMPOSE_PROFILES=rabbitmq` in `.env.local` to automatically spin up RabbitMQ)*
 
 ### 5. Start Application Server
 ```bash
@@ -259,12 +267,12 @@ Results:
 
 - **PHP 8.5** — `declare(strict_types=1)`, `readonly` classes, enums, match expressions, constructor promotion
 - **Symfony 8.1** — Framework, Messenger, RateLimiter, Cache, HttpClient, Console, Serializer
-- **Redis** — description caching, rate limiter storage, Messenger transport
+- **RabbitMQ & Redis** — transport-agnostic async message queuing via AMQP/Redis, description caching, rate limiter storage
 - **Ollama** — self-hosted local AI inference engine
 - **Google Gemini API** — cloud LLM provider
 - **PHPStan (Level 8)** — maximum strictness static type checking
 - **PHPUnit 13 & PCOV** — comprehensive unit and functional testing suite with coverage
-- **Docker & Docker Compose** — containerized environment (multi-stage Alpine PHP-FPM)
+- **Docker & Docker Compose** — containerized environment (multi-stage Alpine PHP-FPM with `amqp` and `redis` extensions)
 - **OpenAPI 3.1 & Swagger UI** — interactive API specification
 
 ---

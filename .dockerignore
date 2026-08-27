@@ -3,10 +3,8 @@
 .history
 .phpunit.cache
 .editorconfig
-.env
-.env.dev
-.env.test
 .env.local
+.env.*.local
 ollama_data
 postgres_data
 tests

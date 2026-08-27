@@ -129,7 +129,7 @@ paths:
       description: |
         Dispatches a product description generation job to the background queue.
         Returns a `job_id` used to poll the job status.
-        Messages are processed asynchronously via Symfony Messenger (Redis transport).
+        Messages are processed asynchronously via Symfony Messenger (Redis or RabbitMQ AMQP transport).
       tags:
         - Product Descriptions
       requestBody:

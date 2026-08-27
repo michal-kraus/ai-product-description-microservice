@@ -11,13 +11,17 @@ RUN composer install \
     --no-interaction \
     --prefer-dist \
     --optimize-autoloader \
-    --classmap-authoritative
+    --ignore-platform-reqs
 
 # ---- Stage 2: Production runtime ----
 FROM php:8.5-fpm-alpine AS runtime
 
-RUN apk add --no-cache icu-libs \
-    && docker-php-ext-install intl opcache
+RUN apk add --no-cache icu-libs rabbitmq-c \
+    && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev rabbitmq-c-dev \
+    && pecl install amqp \
+    && docker-php-ext-enable amqp \
+    && docker-php-ext-install intl \
+    && apk del .build-deps
 
 # PHP production tuning
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
@@ -33,7 +37,7 @@ COPY config ./config
 COPY public ./public
 COPY src ./src
 
-COPY composer.json symfony.lock ./
+COPY .env composer.json symfony.lock ./
 
 # Run Symfony post-install scripts (cache warmup etc.)
 RUN php bin/console cache:warmup --env=prod
