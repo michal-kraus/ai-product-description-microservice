@@ -7,7 +7,7 @@ namespace App\Tests\Controller;
 use App\AI\Client\AIClientInterface;
 use App\AI\DTO\AIResponse;
 use App\AI\DTO\DescriptionRequest;
-use App\Controller\ProductDescriptionController;
+use App\DTO\GenerateProductDescriptionRequest;
 use App\Enum\GenerateProductDescriptionMessageStatus;
 use App\Service\JobStatusManager;
 use App\Tests\Fixtures\ProductDataProvider;
@@ -122,48 +122,72 @@ final class ProductDescriptionControllerTest extends WebTestCase
     {
         $syncUrl = $this->router->generate('app_product_descriptions_sync');
 
-        $this->client->request('POST', $syncUrl, []);
+        $this->client->request(
+            'POST',
+            $syncUrl,
+            server: ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'],
+            content: (string) json_encode([]),
+        );
 
         self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
         $response = json_decode((string) $this->client->getResponse()->getContent(), true);
-        self::assertArrayHasKey('error', $response);
+        self::assertIsArray($response);
     }
 
     public function testItReturns400WhenParametersAreMissingInAsync(): void
     {
         $asyncUrl = $this->router->generate('app_product_descriptions_async');
 
-        $this->client->request('POST', $asyncUrl, []);
+        $this->client->request(
+            'POST',
+            $asyncUrl,
+            server: ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'],
+            content: (string) json_encode([]),
+        );
 
         self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
         $response = json_decode((string) $this->client->getResponse()->getContent(), true);
-        self::assertArrayHasKey('error', $response);
+        self::assertIsArray($response);
     }
 
     public function testItReturns400WhenNameExceedsMaxLength(): void
     {
-        $longName = str_repeat('a', ProductDescriptionController::MAX_NAME_LENGTH + 1);
-        $this->client->request('POST', $this->router->generate('app_product_descriptions_sync'), [
-            'name' => $longName,
-            'features' => 'Valid features',
-        ]);
+        $longName = str_repeat('a', GenerateProductDescriptionRequest::MAX_NAME_LENGTH + 1);
+        $this->client->request(
+            'POST',
+            $this->router->generate('app_product_descriptions_sync'),
+            server: ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'],
+            content: (string) json_encode([
+                'name' => $longName,
+                'features' => 'Valid features',
+            ]),
+        );
 
         self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
         $response = json_decode((string) $this->client->getResponse()->getContent(), true);
-        self::assertStringContainsString('too long', $response['error']);
+        self::assertIsArray($response);
+        $content = (string) $this->client->getResponse()->getContent();
+        self::assertStringContainsString('too long', $content);
     }
 
     public function testItReturns400WhenFeaturesExceedMaxLength(): void
     {
-        $longFeatures = str_repeat('f', ProductDescriptionController::MAX_FEATURES_LENGTH + 1);
-        $this->client->request('POST', $this->router->generate('app_product_descriptions_async'), [
-            'name' => 'Valid name',
-            'features' => $longFeatures,
-        ]);
+        $longFeatures = str_repeat('f', GenerateProductDescriptionRequest::MAX_FEATURES_LENGTH + 1);
+        $this->client->request(
+            'POST',
+            $this->router->generate('app_product_descriptions_async'),
+            server: ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'],
+            content: (string) json_encode([
+                'name' => 'Valid name',
+                'features' => $longFeatures,
+            ]),
+        );
 
         self::assertResponseStatusCodeSame(Response::HTTP_BAD_REQUEST);
         $response = json_decode((string) $this->client->getResponse()->getContent(), true);
-        self::assertStringContainsString('too long', $response['error']);
+        self::assertIsArray($response);
+        $content = (string) $this->client->getResponse()->getContent();
+        self::assertStringContainsString('too long', $content);
     }
 
     public function testItReturns429WhenRateLimitIsExceeded(): void

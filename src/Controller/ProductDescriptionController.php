@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\DTO\GenerateProductDescriptionRequest;
 use App\Enum\GenerateProductDescriptionMessageStatus;
 use App\Message\GenerateProductDescriptionMessage;
 use App\Service\JobStatusManager;
@@ -13,6 +14,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Attribute\MapRequestPayload;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
@@ -20,8 +22,8 @@ use Throwable;
 
 final class ProductDescriptionController extends AbstractController
 {
-    public const MAX_NAME_LENGTH = 200;
-    public const MAX_FEATURES_LENGTH = 2000;
+    public const MAX_NAME_LENGTH = GenerateProductDescriptionRequest::MAX_NAME_LENGTH;
+    public const MAX_FEATURES_LENGTH = GenerateProductDescriptionRequest::MAX_FEATURES_LENGTH;
 
     public function __construct(
         private readonly RateLimiterFactory $productDescriptionApiLimiter,
@@ -29,25 +31,24 @@ final class ProductDescriptionController extends AbstractController
     ) {}
 
     #[Route('/product/descriptions/sync', name: 'app_product_descriptions_sync', methods: ['POST'])]
-    public function generateProductDescription(Request $request, ProductDescriptionGenerator $generator): JsonResponse
-    {
+    public function generateProductDescription(
+        Request $request,
+        #[MapRequestPayload(validationFailedStatusCode: Response::HTTP_BAD_REQUEST)]
+        GenerateProductDescriptionRequest $productDescriptionRequest,
+        ProductDescriptionGenerator $generator,
+    ): JsonResponse {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
             return $rateLimitResponse;
         }
 
-        $payload = $request->getPayload();
-        $productName = trim($payload->getString('name', $request->request->getString('name')));
-        $productFeatures = trim($payload->getString('features', $request->request->getString('features')));
-
-        if ($validationResponse = $this->validateInput($productName, $productFeatures)) {
-            return $validationResponse;
-        }
-
         try {
-            $description = $generator->generate($productName, $productFeatures);
+            $description = $generator->generate(
+                $productDescriptionRequest->name,
+                $productDescriptionRequest->features,
+            );
         } catch (Throwable $e) {
             $this->logger->error('Sync description generation failed.', [
-                'product' => $productName,
+                'product' => $productDescriptionRequest->name,
                 'error' => $e->getMessage(),
             ]);
 
@@ -65,6 +66,8 @@ final class ProductDescriptionController extends AbstractController
     #[Route('/product/descriptions/async', name: 'app_product_descriptions_async', methods: ['POST'])]
     public function generateProductDescriptionAsync(
         Request $request,
+        #[MapRequestPayload(validationFailedStatusCode: Response::HTTP_BAD_REQUEST)]
+        GenerateProductDescriptionRequest $productDescriptionRequest,
         MessageBusInterface $bus,
         JobStatusManager $jobStatusManager,
     ): JsonResponse {
@@ -72,26 +75,18 @@ final class ProductDescriptionController extends AbstractController
             return $rateLimitResponse;
         }
 
-        $payload = $request->getPayload();
-        $productName = trim($payload->getString('name', $request->request->getString('name')));
-        $productFeatures = trim($payload->getString('features', $request->request->getString('features')));
-
-        if ($validationResponse = $this->validateInput($productName, $productFeatures)) {
-            return $validationResponse;
-        }
-
         $jobId = uniqid();
         $jobStatusManager->createJob($jobId);
 
         $bus->dispatch(new GenerateProductDescriptionMessage(
             $jobId,
-            $productName,
-            $productFeatures,
+            $productDescriptionRequest->name,
+            $productDescriptionRequest->features,
         ));
 
         $this->logger->info('Async description job dispatched.', [
             'job_id' => $jobId,
-            'product' => $productName,
+            'product' => $productDescriptionRequest->name,
         ]);
 
         return $this->json([
@@ -134,27 +129,6 @@ final class ProductDescriptionController extends AbstractController
             return $this->json([
                 'error' => 'Too many requests. Please try again later.',
             ], Response::HTTP_TOO_MANY_REQUESTS);
-        }
-
-        return null;
-    }
-
-    private function validateInput(string $name, string $features): ?JsonResponse
-    {
-        if ($name === '' || $features === '') {
-            return $this->json([
-                'error' => 'Missing or empty required parameters: "name" and "features" are required.',
-            ], Response::HTTP_BAD_REQUEST);
-        }
-
-        if (mb_strlen($name) > self::MAX_NAME_LENGTH || mb_strlen($features) > self::MAX_FEATURES_LENGTH) {
-            return $this->json([
-                'error' => \sprintf(
-                    'Input too long. Maximum length: name=%d, features=%d characters.',
-                    self::MAX_NAME_LENGTH,
-                    self::MAX_FEATURES_LENGTH,
-                ),
-            ], Response::HTTP_BAD_REQUEST);
         }
 
         return null;
