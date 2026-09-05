@@ -3,6 +3,7 @@
 .history
 .phpunit.cache
 .editorconfig
+.env
 .env.local
 .env.*.local
 ollama_data
