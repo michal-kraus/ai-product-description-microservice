@@ -1,4 +1,18 @@
 services:
+  # Development only: expose ports to host for local inspection and CLI debugging
+  redis:
+    ports:
+      - "6379:6379"
+
+  ai_local:
+    ports:
+      - "21434:11434"
+
+  rabbitmq:
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
   redisinsight:
     image: redis/redisinsight:latest
     restart: unless-stopped

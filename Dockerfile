@@ -1,5 +1,7 @@
 # ---- Stage 1: Install dependencies ----
-FROM composer:2 AS vendor
+FROM php:8.5-fpm-alpine AS vendor
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
 
@@ -10,8 +12,7 @@ RUN composer install \
     --no-scripts \
     --no-interaction \
     --prefer-dist \
-    --optimize-autoloader \
-    --ignore-platform-reqs
+    --optimize-autoloader
 
 # ---- Stage 2: Production runtime ----
 FROM php:8.5-fpm-alpine AS runtime
@@ -37,10 +38,10 @@ COPY config ./config
 COPY public ./public
 COPY src ./src
 
-COPY .env composer.json symfony.lock ./
+COPY composer.json symfony.lock ./
 
-# Run Symfony post-install scripts (cache warmup etc.)
-RUN php bin/console cache:warmup --env=prod
+# Run Symfony post-install scripts (cache warmup etc.) with build-time secret
+RUN APP_SECRET=build_time_dummy_secret_not_for_production php bin/console cache:warmup --env=prod
 
 RUN addgroup -g 1000 app && adduser -u 1000 -G app -s /bin/sh -D app \
     && chown -R app:app /app/var
