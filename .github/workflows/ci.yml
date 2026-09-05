@@ -55,6 +55,9 @@ jobs:
       - name: Validate composer.json
         run: composer validate --strict --no-check-publish
 
+      - name: Setup environment file
+        run: cp .env.example .env
+
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress --no-interaction --optimize-autoloader
 

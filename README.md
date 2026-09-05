@@ -243,8 +243,8 @@ docker compose exec ai_local ollama pull qwen2.5:0.5b
 
 ### 4. Install Dependencies & Configure
 ```bash
+cp .env.example .env
 composer install
-cp .env .env.local
 ```
 
 > **Queue Transport Switching**: In `.env.local`, set `MESSENGER_TRANSPORT_DSN`:

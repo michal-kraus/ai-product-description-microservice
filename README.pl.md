@@ -243,8 +243,8 @@ docker compose exec ai_local ollama pull qwen2.5:0.5b
 
 ### 4. Instalacja zależności i konfiguracja
 ```bash
+cp .env.example .env
 composer install
-cp .env .env.local
 ```
 
 > **Wybór brokera kolejek**: W pliku `.env.local` ustaw zmienną `MESSENGER_TRANSPORT_DSN`:
