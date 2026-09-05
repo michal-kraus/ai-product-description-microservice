@@ -17,9 +17,10 @@ services:
     environment:
       APP_ENV: prod
       APP_SECRET: ${APP_SECRET:?APP_SECRET is required}
+      DEFAULT_URI: http://localhost:8000
       REDIS_URL: redis://redis:6379
-      MESSENGER_TRANSPORT_DSN: ${MESSENGER_TRANSPORT_DSN:-redis://redis:6379/messages}
-      MESSENGER_TRANSPORT_DSN_FAILED: ${MESSENGER_TRANSPORT_DSN_FAILED:-redis://redis:6379/failed_messages}
+      MESSENGER_TRANSPORT_DSN: ${DOCKER_MESSENGER_TRANSPORT_DSN:-redis://redis:6379/messages}
+      MESSENGER_TRANSPORT_DSN_FAILED: ${DOCKER_MESSENGER_TRANSPORT_DSN_FAILED:-redis://redis:6379/failed_messages}
       OLLAMA_URL: http://ai_local:11434
     depends_on:
       redis:
@@ -37,9 +38,10 @@ services:
     environment:
       APP_ENV: prod
       APP_SECRET: ${APP_SECRET:?APP_SECRET is required}
+      DEFAULT_URI: http://localhost:8000
       REDIS_URL: redis://redis:6379
-      MESSENGER_TRANSPORT_DSN: ${MESSENGER_TRANSPORT_DSN:-redis://redis:6379/messages}
-      MESSENGER_TRANSPORT_DSN_FAILED: ${MESSENGER_TRANSPORT_DSN_FAILED:-redis://redis:6379/failed_messages}
+      MESSENGER_TRANSPORT_DSN: ${DOCKER_MESSENGER_TRANSPORT_DSN:-redis://redis:6379/messages}
+      MESSENGER_TRANSPORT_DSN_FAILED: ${DOCKER_MESSENGER_TRANSPORT_DSN_FAILED:-redis://redis:6379/failed_messages}
       OLLAMA_URL: http://ai_local:11434
     depends_on:
       redis:
