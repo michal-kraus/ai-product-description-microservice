@@ -252,6 +252,6 @@ final class ProductDescriptionControllerTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_INTERNAL_SERVER_ERROR);
         $response = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertSame('Failed to generate product description.', $response['error']);
-        self::assertArrayHasKey('details', $response);
+        self::assertArrayNotHasKey('details', $response);
     }
 }

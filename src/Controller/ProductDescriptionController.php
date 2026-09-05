@@ -50,12 +50,11 @@ final class ProductDescriptionController extends AbstractController
         } catch (Throwable $e) {
             $this->logger->error('Sync description generation failed.', [
                 'product' => $productDescriptionRequest->name,
-                'error' => $e->getMessage(),
+                'exception' => $e,
             ]);
 
             return $this->json([
                 'error' => 'Failed to generate product description.',
-                'details' => $e->getMessage(),
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
 
