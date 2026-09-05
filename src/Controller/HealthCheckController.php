@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use App\AI\Client\AIClientInterface;
 use Psr\Cache\CacheItemPoolInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -17,10 +18,19 @@ final class HealthCheckController
         private readonly CacheItemPoolInterface $messengerJobsCache,
         private readonly AIClientInterface $aiClient,
         private readonly string $aiProvider,
+        private readonly LoggerInterface $logger,
     ) {}
 
     #[Route('/health', name: 'app_health', methods: ['GET'])]
-    public function __invoke(): JsonResponse
+    public function health(): JsonResponse
+    {
+        return new JsonResponse([
+            'status' => 'ok',
+        ], Response::HTTP_OK);
+    }
+
+    #[Route('/ready', name: 'app_ready', methods: ['GET'])]
+    public function ready(): JsonResponse
     {
         $checks = [
             'redis' => $this->checkRedis(),
@@ -48,7 +58,9 @@ final class HealthCheckController
 
             return ['healthy' => true, 'details' => 'connected'];
         } catch (Throwable $e) {
-            return ['healthy' => false, 'details' => $e->getMessage()];
+            $this->logger->error('Readiness check failed for Redis.', ['exception' => $e]);
+
+            return ['healthy' => false, 'details' => 'unavailable'];
         }
     }
 
@@ -62,7 +74,12 @@ final class HealthCheckController
 
             return ['healthy' => true, 'details' => \sprintf('provider: %s', $this->aiProvider)];
         } catch (Throwable $e) {
-            return ['healthy' => false, 'details' => \sprintf('provider: %s (%s)', $this->aiProvider, $e->getMessage())];
+            $this->logger->error('Readiness check failed for AI provider.', [
+                'provider' => $this->aiProvider,
+                'exception' => $e,
+            ]);
+
+            return ['healthy' => false, 'details' => \sprintf('provider: %s (unavailable)', $this->aiProvider)];
         }
     }
 }

@@ -8,6 +8,7 @@ use App\AI\Client\AIClientInterface;
 use App\Controller\HealthCheckController;
 use Psr\Cache\CacheItemInterface;
 use Psr\Cache\CacheItemPoolInterface;
+use Psr\Log\NullLogger;
 use RuntimeException;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
@@ -15,7 +16,22 @@ use Symfony\Component\Routing\RouterInterface;
 
 final class HealthCheckControllerTest extends WebTestCase
 {
-    public function testItReturnsHealthyStatus(): void
+    public function testItReturnsLivenessStatus(): void
+    {
+        $client = static::createClient();
+        $router = static::getContainer()->get('router');
+        self::assertInstanceOf(RouterInterface::class, $router);
+
+        $client->request('GET', $router->generate('app_health'));
+
+        self::assertResponseIsSuccessful();
+        self::assertResponseHeaderSame('content-type', 'application/json');
+
+        $response = json_decode((string) $client->getResponse()->getContent(), true);
+        self::assertSame('ok', $response['status']);
+    }
+
+    public function testItReturnsReadyStatus(): void
     {
         $client = static::createClient();
 
@@ -26,7 +42,7 @@ final class HealthCheckControllerTest extends WebTestCase
         $router = static::getContainer()->get('router');
         self::assertInstanceOf(RouterInterface::class, $router);
 
-        $client->request('GET', $router->generate('app_health'));
+        $client->request('GET', $router->generate('app_ready'));
 
         self::assertResponseIsSuccessful();
         self::assertResponseHeaderSame('content-type', 'application/json');
@@ -50,15 +66,15 @@ final class HealthCheckControllerTest extends WebTestCase
         $aiClient = $this->createStub(AIClientInterface::class);
         $aiClient->method('ping')->willReturn(true);
 
-        $controller = new HealthCheckController($failingCache, $aiClient, 'ollama');
-        $response = $controller();
+        $controller = new HealthCheckController($failingCache, $aiClient, 'ollama', new NullLogger());
+        $response = $controller->ready();
 
         self::assertSame(Response::HTTP_SERVICE_UNAVAILABLE, $response->getStatusCode());
         $data = json_decode((string) $response->getContent(), true);
 
         self::assertSame('degraded', $data['status']);
         self::assertFalse($data['checks']['redis']['healthy']);
-        self::assertSame('Redis connection refused', $data['checks']['redis']['details']);
+        self::assertSame('unavailable', $data['checks']['redis']['details']);
         self::assertTrue($data['checks']['ai_provider']['healthy']);
     }
 
@@ -72,8 +88,8 @@ final class HealthCheckControllerTest extends WebTestCase
         $failingAiClient->method('ping')
             ->willThrowException(new RuntimeException('Connection timeout'));
 
-        $controller = new HealthCheckController($cache, $failingAiClient, 'ollama');
-        $response = $controller();
+        $controller = new HealthCheckController($cache, $failingAiClient, 'ollama', new NullLogger());
+        $response = $controller->ready();
 
         self::assertSame(Response::HTTP_SERVICE_UNAVAILABLE, $response->getStatusCode());
         $data = json_decode((string) $response->getContent(), true);
@@ -81,6 +97,6 @@ final class HealthCheckControllerTest extends WebTestCase
         self::assertSame('degraded', $data['status']);
         self::assertTrue($data['checks']['redis']['healthy']);
         self::assertFalse($data['checks']['ai_provider']['healthy']);
-        self::assertStringContainsString('Connection timeout', $data['checks']['ai_provider']['details']);
+        self::assertSame('provider: ollama (unavailable)', $data['checks']['ai_provider']['details']);
     }
 }
