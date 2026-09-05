@@ -27,6 +27,7 @@ final class ProductDescriptionController extends AbstractController
 
     public function __construct(
         private readonly RateLimiterFactory $productDescriptionApiLimiter,
+        private readonly RateLimiterFactory $productDescriptionStatusApiLimiter,
         private readonly LoggerInterface $logger,
     ) {}
 
@@ -98,8 +99,13 @@ final class ProductDescriptionController extends AbstractController
     #[Route('/product/descriptions/async/{jobId}', name: 'app_product_descriptions_async_status', methods: ['GET'])]
     public function getProductDescriptionAsyncStatus(
         string $jobId,
+        Request $request,
         JobStatusManager $jobStatusManager,
     ): JsonResponse {
+        if ($rateLimitResponse = $this->checkStatusRateLimit($request)) {
+            return $rateLimitResponse;
+        }
+
         $jobData = $jobStatusManager->getJob($jobId);
 
         if ($jobData === null) {
@@ -128,6 +134,23 @@ final class ProductDescriptionController extends AbstractController
 
             return $this->json([
                 'error' => 'Too many requests. Please try again later.',
+            ], Response::HTTP_TOO_MANY_REQUESTS);
+        }
+
+        return null;
+    }
+
+    private function checkStatusRateLimit(Request $request): ?JsonResponse
+    {
+        $limiter = $this->productDescriptionStatusApiLimiter->create($request->getClientIp() ?? 'anonymous');
+
+        if (!$limiter->consume()->isAccepted()) {
+            $this->logger->warning('Status polling rate limit exceeded.', [
+                'ip' => $request->getClientIp(),
+            ]);
+
+            return $this->json([
+                'error' => 'Too many status check requests. Please try again later.',
             ], Response::HTTP_TOO_MANY_REQUESTS);
         }
 

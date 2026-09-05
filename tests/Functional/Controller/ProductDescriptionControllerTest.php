@@ -220,6 +220,23 @@ final class ProductDescriptionControllerTest extends WebTestCase
         self::assertStringContainsString('Too many requests', $response['error']);
     }
 
+    public function testItReturns429WhenStatusRateLimitIsExceeded(): void
+    {
+        $this->client->disableReboot();
+
+        $url = $this->router->generate('app_product_descriptions_async_status', ['jobId' => 'job-status-limit']);
+
+        for ($i = 0; $i < 20; $i++) {
+            $this->client->request('GET', $url);
+            self::assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND);
+        }
+
+        $this->client->request('GET', $url);
+        self::assertResponseStatusCodeSame(Response::HTTP_TOO_MANY_REQUESTS);
+        $response = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertStringContainsString('Too many status check requests', $response['error']);
+    }
+
     public function testItReturns500WhenGeneratorFailsInSync(): void
     {
         $aiClientMock = $this->createStub(AIClientInterface::class);
