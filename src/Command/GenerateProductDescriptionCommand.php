@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use App\Enum\GenerateProductDescriptionMessageStatus;
 use App\Message\GenerateProductDescriptionMessage;
 use App\Service\JobStatusManager;
 use App\Service\ProductDescriptionGenerator;
@@ -15,6 +16,7 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Messenger\MessageBusInterface;
+use Symfony\Component\Uid\Uuid;
 use Throwable;
 
 #[AsCommand(
@@ -61,10 +63,20 @@ final class GenerateProductDescriptionCommand extends Command
         );
 
         if ($isAsync) {
-            $jobId = uniqid('cli_');
+            $jobId = Uuid::v7()->toRfc4122();
             $this->jobStatusManager->createJob($jobId);
 
-            $this->messageBus->dispatch(new GenerateProductDescriptionMessage($jobId, $name, $features));
+            try {
+                $this->messageBus->dispatch(new GenerateProductDescriptionMessage($jobId, $name, $features));
+            } catch (Throwable $e) {
+                $this->jobStatusManager->updateJob($jobId, [
+                    'status' => GenerateProductDescriptionMessageStatus::FAILED->value,
+                    'error' => 'Unable to dispatch job.',
+                ]);
+                $io->error(\sprintf('Failed to dispatch job: %s', $e->getMessage()));
+
+                return Command::FAILURE;
+            }
 
             $io->success(\sprintf('Job dispatched successfully! Job ID: %s', $jobId));
             $io->note(\sprintf('Check status via API: GET /product/descriptions/async/%s', $jobId));

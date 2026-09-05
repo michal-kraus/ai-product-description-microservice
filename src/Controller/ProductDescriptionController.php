@@ -18,6 +18,7 @@ use Symfony\Component\HttpKernel\Attribute\MapRequestPayload;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Uid\Uuid;
 use Throwable;
 
 final class ProductDescriptionController extends AbstractController
@@ -75,14 +76,31 @@ final class ProductDescriptionController extends AbstractController
             return $rateLimitResponse;
         }
 
-        $jobId = uniqid();
+        $jobId = Uuid::v7()->toRfc4122();
         $jobStatusManager->createJob($jobId);
 
-        $bus->dispatch(new GenerateProductDescriptionMessage(
-            $jobId,
-            $productDescriptionRequest->name,
-            $productDescriptionRequest->features,
-        ));
+        try {
+            $bus->dispatch(new GenerateProductDescriptionMessage(
+                $jobId,
+                $productDescriptionRequest->name,
+                $productDescriptionRequest->features,
+            ));
+        } catch (Throwable $e) {
+            $jobStatusManager->updateJob($jobId, [
+                'status' => GenerateProductDescriptionMessageStatus::FAILED->value,
+                'error' => 'Unable to dispatch job.',
+            ]);
+
+            $this->logger->error('Failed to dispatch async description job.', [
+                'job_id' => $jobId,
+                'product' => $productDescriptionRequest->name,
+                'exception' => $e,
+            ]);
+
+            return $this->json([
+                'error' => 'Failed to dispatch async description job.',
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
 
         $this->logger->info('Async description job dispatched.', [
             'job_id' => $jobId,

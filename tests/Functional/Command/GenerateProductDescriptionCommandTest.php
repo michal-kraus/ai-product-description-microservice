@@ -14,6 +14,14 @@ use Symfony\Component\Console\Tester\CommandTester;
 
 final class GenerateProductDescriptionCommandTest extends KernelTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        putenv('COLUMNS=120');
+        $_SERVER['COLUMNS'] = '120';
+        $_ENV['COLUMNS'] = '120';
+    }
+
     public function testItGeneratesDescriptionSynchronously(): void
     {
         $aiClientMock = $this->createMock(AIClientInterface::class);
@@ -47,7 +55,7 @@ final class GenerateProductDescriptionCommandTest extends KernelTestCase
         self::assertSame(Command::SUCCESS, $exitCode);
         $output = $commandTester->getDisplay();
         self::assertStringContainsString('Job dispatched successfully', $output);
-        self::assertStringContainsString('cli_', $output);
+        self::assertMatchesRegularExpression('/Job ID:\s+[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i', $output);
     }
 
     public function testItReturnsInvalidWhenArgumentsAreEmpty(): void
@@ -80,12 +88,34 @@ final class GenerateProductDescriptionCommandTest extends KernelTestCase
         self::assertStringContainsString('Failed to generate description', $commandTester->getDisplay());
     }
 
-    private function createCommandTester(?AIClientInterface $aiClient = null): CommandTester
+    public function testItFailsWhenAsyncDispatchThrows(): void
     {
+        $bus = $this->createStub(\Symfony\Component\Messenger\MessageBusInterface::class);
+        $bus->method('dispatch')->willThrowException(new RuntimeException('Broker unavailable'));
+
+        $commandTester = $this->createCommandTester(messageBus: $bus);
+        $exitCode = $commandTester->execute([
+            'name' => 'Test Product',
+            'features' => 'Test features',
+            '--async' => true,
+        ]);
+
+        self::assertSame(Command::FAILURE, $exitCode);
+        self::assertStringContainsString('Failed to dispatch job', $commandTester->getDisplay());
+    }
+
+    private function createCommandTester(
+        ?AIClientInterface $aiClient = null,
+        ?\Symfony\Component\Messenger\MessageBusInterface $messageBus = null,
+    ): CommandTester {
         $kernel = self::bootKernel();
 
         if ($aiClient !== null) {
             static::getContainer()->set(AIClientInterface::class, $aiClient);
+        }
+
+        if ($messageBus !== null) {
+            static::getContainer()->set(\Symfony\Component\Messenger\MessageBusInterface::class, $messageBus);
         }
 
         $application = new Application($kernel);

@@ -2,13 +2,14 @@
 
 declare(strict_types=1);
 
-namespace App\Tests\Controller;
+namespace App\Tests\Functional\Controller;
 
 use App\AI\Client\AIClientInterface;
 use App\AI\DTO\AIResponse;
 use App\AI\DTO\DescriptionRequest;
 use App\DTO\GenerateProductDescriptionRequest;
 use App\Enum\GenerateProductDescriptionMessageStatus;
+use App\Message\GenerateProductDescriptionMessage;
 use App\Service\JobStatusManager;
 use App\Tests\Fixtures\ProductDataProvider;
 use PHPUnit\Framework\Attributes\DataProviderExternal;
@@ -17,6 +18,7 @@ use RuntimeException;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Messenger\Transport\InMemory\InMemoryTransport;
 use Symfony\Component\Routing\RouterInterface;
 
 final class ProductDescriptionControllerTest extends WebTestCase
@@ -49,7 +51,9 @@ final class ProductDescriptionControllerTest extends WebTestCase
         $aiClientMock = $this->createMock(AIClientInterface::class);
         $aiClientMock->expects($this->once())
             ->method('generateDescription')
-            ->with(new DescriptionRequest($expectedName, $expectedFeatures))
+            ->with($this->callback(function (DescriptionRequest $request) use ($expectedName, $expectedFeatures): bool {
+                return $request->productName === $expectedName && $request->productFeatures === $expectedFeatures;
+            }))
             ->willReturn(new AIResponse($mockedOutput));
 
         static::getContainer()->set(AIClientInterface::class, $aiClientMock);
@@ -73,6 +77,10 @@ final class ProductDescriptionControllerTest extends WebTestCase
         string $expectedFeatures,
         string $mockedOutput,
     ): void {
+        /** @var InMemoryTransport $transport */
+        $transport = static::getContainer()->get('messenger.transport.async');
+        $transport->reset();
+
         $this->client->request('POST', $this->router->generate('app_product_descriptions_async'), [
             'name' => $expectedName,
             'features' => $expectedFeatures,
@@ -82,6 +90,14 @@ final class ProductDescriptionControllerTest extends WebTestCase
         $response = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertArrayHasKey('job_id', $response);
         self::assertSame(GenerateProductDescriptionMessageStatus::PENDING->value, $response['status']);
+
+        $sentEnvelopes = $transport->getSent();
+        self::assertCount(1, $sentEnvelopes);
+        $message = $sentEnvelopes[0]->getMessage();
+        self::assertInstanceOf(GenerateProductDescriptionMessage::class, $message);
+        self::assertSame($response['job_id'], $message->jobId);
+        self::assertSame($expectedName, $message->name);
+        self::assertSame($expectedFeatures, $message->features);
     }
 
     public function testItReturns404ForNonExistentJob(): void
@@ -100,6 +116,9 @@ final class ProductDescriptionControllerTest extends WebTestCase
 
         $jobId = 'test-job-999';
         $jobStatusManager->createJob($jobId);
+        $jobStatusManager->updateJob($jobId, [
+            'status' => GenerateProductDescriptionMessageStatus::PROCESSING->value,
+        ]);
         $jobStatusManager->updateJob($jobId, [
             'status' => GenerateProductDescriptionMessageStatus::COMPLETED->value,
             'description' => 'Premium mechanical keyboard with RGB backlighting...',
@@ -253,5 +272,21 @@ final class ProductDescriptionControllerTest extends WebTestCase
         $response = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertSame('Failed to generate product description.', $response['error']);
         self::assertArrayNotHasKey('details', $response);
+    }
+
+    public function testItReturns500WhenAsyncDispatchFails(): void
+    {
+        $bus = $this->createStub(\Symfony\Component\Messenger\MessageBusInterface::class);
+        $bus->method('dispatch')->willThrowException(new RuntimeException('Queue connection failed'));
+        static::getContainer()->set(\Symfony\Component\Messenger\MessageBusInterface::class, $bus);
+
+        $this->client->request('POST', $this->router->generate('app_product_descriptions_async'), [
+            'name' => 'Failing Async Product',
+            'features' => 'Some features',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_INTERNAL_SERVER_ERROR);
+        $response = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame('Failed to dispatch async description job.', $response['error']);
     }
 }
