@@ -12,4 +12,6 @@ interface AIClientInterface
     public function generateDescription(DescriptionRequest $descriptionRequest): AIResponse;
 
     public function ping(): bool;
+
+    public function getModel(): string;
 }

@@ -19,6 +19,7 @@ class GeminiClient implements AIClientInterface
         private string $apiKey,
         private string $model = 'gemini-3.1-flash-lite-preview',
         private string $baseUrl = self::DEFAULT_BASE_URL,
+        private float $timeout = 60.0,
     ) {}
 
     public function generateDescription(DescriptionRequest $descriptionRequest): AIResponse
@@ -33,6 +34,7 @@ class GeminiClient implements AIClientInterface
                 'model' => $this->model,
                 'input' => $descriptionRequest->prompt,
             ],
+            'timeout' => $this->timeout,
         ]);
         $data = $response->toArray();
 
@@ -71,5 +73,10 @@ class GeminiClient implements AIClientInterface
         }
 
         return true;
+    }
+
+    public function getModel(): string
+    {
+        return $this->model;
     }
 }

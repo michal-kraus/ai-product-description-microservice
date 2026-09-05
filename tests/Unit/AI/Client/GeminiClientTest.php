@@ -43,7 +43,7 @@ class GeminiClientTest extends TestCase
 
         $geminiClient = new GeminiClient($httpClient, self::TEST_API_KEY, self::TEST_MODEL);
 
-        $description = $geminiClient->generateDescription(new DescriptionRequest($expectedName, $expectedFeatures))->description;
+        $description = $geminiClient->generateDescription(new DescriptionRequest($expectedName, $expectedFeatures, 'Test prompt'))->description;
         $this->assertSame($mockedOutput, $description);
     }
 
@@ -57,7 +57,7 @@ class GeminiClientTest extends TestCase
         $httpClient = new MockHttpClient($mockResponse);
 
         $geminiClient = new GeminiClient($httpClient, self::TEST_API_KEY);
-        $description = $geminiClient->generateDescription(new DescriptionRequest('Test', 'Features'))->description;
+        $description = $geminiClient->generateDescription(new DescriptionRequest('Test', 'Features', 'Test prompt'))->description;
 
         $this->assertSame('', $description);
     }
@@ -76,7 +76,7 @@ class GeminiClientTest extends TestCase
         $httpClient = new MockHttpClient($mockResponse);
 
         $geminiClient = new GeminiClient($httpClient, self::TEST_API_KEY);
-        $description = $geminiClient->generateDescription(new DescriptionRequest('Test', 'Features'))->description;
+        $description = $geminiClient->generateDescription(new DescriptionRequest('Test', 'Features', 'Test prompt'))->description;
 
         $this->assertSame('', $description);
     }
@@ -131,5 +131,11 @@ class GeminiClientTest extends TestCase
         $this->expectExceptionMessage('Gemini API health check returned status code 401');
 
         $geminiClient->ping();
+    }
+
+    public function testItReturnsConfiguredModel(): void
+    {
+        $geminiClient = new GeminiClient(new MockHttpClient(), self::TEST_API_KEY, model: 'gemini-custom');
+        $this->assertSame('gemini-custom', $geminiClient->getModel());
     }
 }

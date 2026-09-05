@@ -33,10 +33,13 @@ class ProductDescriptionGeneratorTest extends TestCase
         string $expectedFeatures,
         string $mockedOutput,
     ): void {
+        $expectedPrompt = $this->promptBuilder->build($expectedName, $expectedFeatures);
+
         $aiClient = $this->createMock(AIClientInterface::class);
+        $aiClient->method('getModel')->willReturn('test-model');
         $aiClient->expects($this->once())
             ->method('generateDescription')
-            ->with(new DescriptionRequest($expectedName, $expectedFeatures))
+            ->with(new DescriptionRequest($expectedName, $expectedFeatures, $expectedPrompt))
             ->willReturn(new AIResponse($mockedOutput));
 
         $generator = $this->createGenerator($aiClient);
@@ -50,6 +53,7 @@ class ProductDescriptionGeneratorTest extends TestCase
     public function testItReturnsCachedDescriptionWithoutCallingAiClientTwice(): void
     {
         $aiClient = $this->createMock(AIClientInterface::class);
+        $aiClient->method('getModel')->willReturn('test-model');
         $aiClient->expects($this->once())
             ->method('generateDescription')
             ->willReturn(new AIResponse('Cached description'));
@@ -63,9 +67,45 @@ class ProductDescriptionGeneratorTest extends TestCase
         $this->assertSame($first, $second);
     }
 
+    public function testItInvalidatesCacheWhenProviderOrModelDiffers(): void
+    {
+        $aiClient1 = $this->createMock(AIClientInterface::class);
+        $aiClient1->method('getModel')->willReturn('model-v1');
+        $aiClient1->expects($this->once())
+            ->method('generateDescription')
+            ->willReturn(new AIResponse('Model 1 description'));
+
+        $generator1 = new ProductDescriptionGenerator(
+            $aiClient1,
+            $this->cache,
+            $this->promptBuilder,
+            provider: 'ollama',
+        );
+
+        $desc1 = $generator1->generate('Product', 'Features');
+        $this->assertSame('Model 1 description', $desc1);
+
+        $aiClient2 = $this->createMock(AIClientInterface::class);
+        $aiClient2->method('getModel')->willReturn('model-v2');
+        $aiClient2->expects($this->once())
+            ->method('generateDescription')
+            ->willReturn(new AIResponse('Model 2 description'));
+
+        $generator2 = new ProductDescriptionGenerator(
+            $aiClient2,
+            $this->cache,
+            $this->promptBuilder,
+            provider: 'gemini',
+        );
+
+        $desc2 = $generator2->generate('Product', 'Features');
+        $this->assertSame('Model 2 description', $desc2);
+    }
+
     public function testItThrowsProductDescriptionGenerationExceptionOnAiFailure(): void
     {
         $aiClient = $this->createStub(AIClientInterface::class);
+        $aiClient->method('getModel')->willReturn('test-model');
         $aiClient->method('generateDescription')
             ->willThrowException(new RuntimeException('AI service unavailable'));
 

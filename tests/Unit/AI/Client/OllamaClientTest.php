@@ -37,7 +37,7 @@ class OllamaClientTest extends TestCase
 
         $ollamaClient = new OllamaClient($httpClient, self::TEST_OLLAMA_URL);
 
-        $description = $ollamaClient->generateDescription(new DescriptionRequest($expectedName, $expectedFeatures))->description;
+        $description = $ollamaClient->generateDescription(new DescriptionRequest($expectedName, $expectedFeatures, 'Test prompt'))->description;
         $this->assertSame($mockedOutput, $description);
     }
 
@@ -51,7 +51,7 @@ class OllamaClientTest extends TestCase
         $httpClient = new MockHttpClient($mockResponse);
 
         $ollamaClient = new OllamaClient($httpClient, self::TEST_OLLAMA_URL);
-        $description = $ollamaClient->generateDescription(new DescriptionRequest('Test', 'Features'))->description;
+        $description = $ollamaClient->generateDescription(new DescriptionRequest('Test', 'Features', 'Test prompt'))->description;
 
         $this->assertSame('', $description);
     }
@@ -66,7 +66,7 @@ class OllamaClientTest extends TestCase
         $ollamaClient = new OllamaClient($httpClient, self::TEST_OLLAMA_URL);
 
         $this->expectException(Throwable::class);
-        $ollamaClient->generateDescription(new DescriptionRequest('Test', 'Features'));
+        $ollamaClient->generateDescription(new DescriptionRequest('Test', 'Features', 'Test prompt'));
     }
 
     public function testItPingsSuccessfully(): void
@@ -95,5 +95,11 @@ class OllamaClientTest extends TestCase
         $this->expectExceptionMessage('Ollama health check returned status code 503');
 
         $ollamaClient->ping();
+    }
+
+    public function testItReturnsConfiguredModel(): void
+    {
+        $ollamaClient = new OllamaClient(new MockHttpClient(), self::TEST_OLLAMA_URL, model: 'custom-model');
+        $this->assertSame('custom-model', $ollamaClient->getModel());
     }
 }

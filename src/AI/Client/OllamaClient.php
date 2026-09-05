@@ -20,6 +20,7 @@ class OllamaClient implements AIClientInterface
         private string $model = 'qwen2.5:0.5b',
         private float $temperature = 0.7,
         private bool $stream = false,
+        private float $timeout = 60.0,
     ) {}
 
     public function generateDescription(DescriptionRequest $descriptionRequest): AIResponse
@@ -36,6 +37,7 @@ class OllamaClient implements AIClientInterface
         $url = rtrim($this->ollamaUrl, '/') . self::GENERATE_ENDPOINT;
         $response = $this->httpClient->request('POST', $url, [
             'json' => $json,
+            'timeout' => $this->timeout,
         ]);
         $data = $response->toArray();
 
@@ -54,5 +56,10 @@ class OllamaClient implements AIClientInterface
         }
 
         return true;
+    }
+
+    public function getModel(): string
+    {
+        return $this->model;
     }
 }

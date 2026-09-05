@@ -16,6 +16,7 @@ use Throwable;
 class ProductDescriptionGenerator
 {
     public const CACHE_KEY_PREFIX = 'product_description_';
+    public const CACHE_VERSION = 'v1';
     public const DEFAULT_CACHE_TTL = 600;
 
     public function __construct(
@@ -24,6 +25,8 @@ class ProductDescriptionGenerator
         private PromptBuilder $promptBuilder = new PromptBuilder(),
         private int $cacheTtl = self::DEFAULT_CACHE_TTL,
         private ?LoggerInterface $logger = null,
+        private string $provider = 'default',
+        private string $model = 'default',
     ) {}
 
     public function generate(string $productName, string $productFeatures): string
@@ -31,7 +34,7 @@ class ProductDescriptionGenerator
         $prompt = $this->promptBuilder->build($productName, $productFeatures);
         $descriptionRequest = new DescriptionRequest($productName, $productFeatures, $prompt);
 
-        $cacheKey = $this->buildCacheKey($productName, $productFeatures);
+        $cacheKey = $this->buildCacheKey($productName, $productFeatures, $prompt);
 
         try {
             $cacheHit = true;
@@ -67,8 +70,20 @@ class ProductDescriptionGenerator
         return $description;
     }
 
-    private function buildCacheKey(string $productName, string $productFeatures): string
+    private function buildCacheKey(string $productName, string $productFeatures, string $prompt): string
     {
-        return self::CACHE_KEY_PREFIX . md5($productName . '|' . $productFeatures);
+        $activeModel = $this->aiClient->getModel();
+        $model = ($activeModel !== '') ? $activeModel : $this->model;
+
+        $hash = hash('xxh128', implode('|', [
+            self::CACHE_VERSION,
+            $this->provider,
+            $model,
+            $productName,
+            $productFeatures,
+            $prompt,
+        ]));
+
+        return self::CACHE_KEY_PREFIX . $hash;
     }
 }
