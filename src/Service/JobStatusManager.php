@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Enum\GenerateProductDescriptionMessageStatus;
 use DateTimeImmutable;
 use DateTimeInterface;
+use DomainException;
 use Psr\Cache\CacheItemPoolInterface;
 
 class JobStatusManager
@@ -23,7 +24,7 @@ class JobStatusManager
     {
         $item = $this->messengerJobsCache->getItem(self::KEY_PREFIX . $jobId);
         $item->set([
-            'status' => GenerateProductDescriptionMessageStatus::CREATED->value,
+            'status' => GenerateProductDescriptionMessageStatus::PENDING->value,
             'created_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
         ]);
         $item->expiresAfter($this->ttl);
@@ -37,6 +38,26 @@ class JobStatusManager
     {
         $item = $this->messengerJobsCache->getItem(self::KEY_PREFIX . $jobId);
         $existing = $item->isHit() ? (array) $item->get() : [];
+
+        if (isset($data['status'])) {
+            if ($data['status'] instanceof GenerateProductDescriptionMessageStatus) {
+                $data['status'] = $data['status']->value;
+            }
+
+            if (isset($existing['status']) && \is_string($existing['status']) && \is_string($data['status'])) {
+                $currentStatus = GenerateProductDescriptionMessageStatus::tryFrom($existing['status']);
+                $newStatus = GenerateProductDescriptionMessageStatus::tryFrom($data['status']);
+
+                if ($currentStatus !== null && $newStatus !== null && !$currentStatus->canTransitionTo($newStatus)) {
+                    throw new DomainException(\sprintf(
+                        'Invalid job status transition from "%s" to "%s".',
+                        $currentStatus->value,
+                        $newStatus->value,
+                    ));
+                }
+            }
+        }
+
         $merged = array_merge($existing, $data, [
             'updated_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
         ]);

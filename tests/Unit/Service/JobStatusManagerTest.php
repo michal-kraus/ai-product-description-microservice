@@ -6,6 +6,7 @@ namespace App\Tests\Unit\Service;
 
 use App\Enum\GenerateProductDescriptionMessageStatus;
 use App\Service\JobStatusManager;
+use DomainException;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
@@ -20,7 +21,7 @@ class JobStatusManagerTest extends TestCase
         $this->manager = new JobStatusManager($this->cache, 3600);
     }
 
-    public function testItCreatesJobWithCreatedStatusAndTimestamp(): void
+    public function testItCreatesJobWithPendingStatusAndTimestamp(): void
     {
         $jobId = 'job-123';
         $this->manager->createJob($jobId);
@@ -28,7 +29,7 @@ class JobStatusManagerTest extends TestCase
         $jobData = $this->manager->getJob($jobId);
 
         $this->assertNotNull($jobData);
-        $this->assertSame(GenerateProductDescriptionMessageStatus::CREATED->value, $jobData['status']);
+        $this->assertSame(GenerateProductDescriptionMessageStatus::PENDING->value, $jobData['status']);
         $this->assertArrayHasKey('created_at', $jobData);
     }
 
@@ -41,6 +42,10 @@ class JobStatusManagerTest extends TestCase
         $initialCreatedAt = $initialJobData['created_at'];
 
         $this->manager->updateJob($jobId, [
+            'status' => GenerateProductDescriptionMessageStatus::PROCESSING->value,
+        ]);
+
+        $this->manager->updateJob($jobId, [
             'status' => GenerateProductDescriptionMessageStatus::COMPLETED->value,
             'description' => 'Test description',
         ]);
@@ -51,6 +56,39 @@ class JobStatusManagerTest extends TestCase
         $this->assertSame('Test description', $updatedJobData['description']);
         $this->assertSame($initialCreatedAt, $updatedJobData['created_at']);
         $this->assertArrayHasKey('updated_at', $updatedJobData);
+    }
+
+    public function testItThrowsOnInvalidStateTransition(): void
+    {
+        $jobId = 'job-terminal';
+        $this->manager->createJob($jobId);
+
+        $this->manager->updateJob($jobId, [
+            'status' => GenerateProductDescriptionMessageStatus::PROCESSING->value,
+        ]);
+        $this->manager->updateJob($jobId, [
+            'status' => GenerateProductDescriptionMessageStatus::COMPLETED->value,
+        ]);
+
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('Invalid job status transition from "completed" to "processing"');
+
+        $this->manager->updateJob($jobId, [
+            'status' => GenerateProductDescriptionMessageStatus::PROCESSING->value,
+        ]);
+    }
+
+    public function testItAcceptsEnumInstanceInUpdateJob(): void
+    {
+        $jobId = 'job-enum';
+        $this->manager->createJob($jobId);
+        $this->manager->updateJob($jobId, [
+            'status' => GenerateProductDescriptionMessageStatus::PROCESSING,
+        ]);
+
+        $jobData = $this->manager->getJob($jobId);
+        $this->assertNotNull($jobData);
+        $this->assertSame(GenerateProductDescriptionMessageStatus::PROCESSING->value, $jobData['status']);
     }
 
     public function testItReturnsNullForNonExistentJob(): void
