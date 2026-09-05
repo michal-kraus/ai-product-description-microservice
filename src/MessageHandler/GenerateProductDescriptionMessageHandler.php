@@ -36,14 +36,9 @@ final class GenerateProductDescriptionMessageHandler
         try {
             $description = $this->generator->generate($message->name, $message->features);
         } catch (Throwable $e) {
-            $this->logger->error('Description generation failed.', [
+            $this->logger->error('Description generation attempt failed.', [
                 'job_id' => $message->jobId,
                 'product' => $message->name,
-                'error' => $e->getMessage(),
-            ]);
-
-            $this->jobStatusManager->updateJob($message->jobId, [
-                'status' => GenerateProductDescriptionMessageStatus::FAILED->value,
                 'error' => $e->getMessage(),
             ]);
 

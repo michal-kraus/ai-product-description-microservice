@@ -48,7 +48,7 @@ class GenerateProductDescriptionHandlerTest extends TestCase
         $this->assertSame($mockedOutput, $savedData['description']);
     }
 
-    public function testItSetsJobStatusToFailedOnGeneratorException(): void
+    public function testItLeavesJobStatusAsProcessingOnGeneratorExceptionToAllowRetry(): void
     {
         $generator = $this->createStub(ProductDescriptionGenerator::class);
         $generator->method('generate')
@@ -72,8 +72,7 @@ class GenerateProductDescriptionHandlerTest extends TestCase
 
         $jobData = $this->jobStatusManager->getJob($jobId);
         $this->assertNotNull($jobData);
-        $this->assertSame('failed', $jobData['status']);
-        $this->assertSame('AI error', $jobData['error']);
+        $this->assertSame('processing', $jobData['status']);
     }
 
     private function createHandler(ProductDescriptionGenerator $generator): GenerateProductDescriptionMessageHandler
