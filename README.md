@@ -12,11 +12,11 @@
 
 An asynchronous e-commerce product description generator microservice powered by AI (**Ollama** / **Google Gemini**).
 
-Built as an autonomous, production-grade microservice designed to transform product attributes into marketing copy with caching, rate limiting, and distributed async message queues.
+Built as an autonomous, production-oriented reference implementation designed to transform product attributes into marketing copy with caching, rate limiting, and distributed async message queues.
 
 > [!NOTE]
 > **Portfolio & Reference Architecture Showcase**
-> This repository serves as a production-grade demonstration project showcasing modern **PHP 8.5** and **Symfony 8.1** best practices, clean architecture patterns (Strategy, Factory, Builder, DTO), distributed asynchronous message queues, rate limiting, strict static analysis (PHPStan Level 8), and high test coverage (>99%).
+> This repository serves as a production-oriented reference implementation showcasing modern **PHP 8.5** and **Symfony 8.1** best practices, clean architecture patterns (Strategy, Factory, Builder, DTO), distributed asynchronous message queues, rate limiting, strict static analysis (PHPStan Level 8), and comprehensive automated testing.
 
 ---
 
@@ -25,16 +25,21 @@ Built as an autonomous, production-grade microservice designed to transform prod
 ```mermaid
 flowchart TD
     subgraph Clients ["Input Interfaces"]
-        HTTP["REST API (Sync / Async / Health / Docs)"]
+        HTTP["REST API (Sync / Async / Health / Ready / Docs)"]
         CLI["Symfony CLI (app:generate-description)"]
     end
 
-    subgraph App ["Application Core"]
-        Limiter["Rate Limiter (30 req/min)"]
+    subgraph WebServer ["Web Server Layer"]
+        Nginx["Nginx 1.27 (Reverse Proxy :8000)"]
+    end
+
+    subgraph App ["Application Core (PHP-FPM :9000)"]
+        Limiter["Rate Limiter (30 req/min API, 120 req/min Status)"]
         Controller["ProductDescriptionController"]
         Command["GenerateProductDescriptionCommand"]
         Generator["ProductDescriptionGenerator"]
         JobManager["JobStatusManager"]
+        JobListener["JobFailedListener (Messenger)"]
     end
 
     subgraph MessengerLayer ["Async Queues (Symfony Messenger)"]
@@ -56,20 +61,21 @@ flowchart TD
         GeminiAPI["Google Gemini API (Cloud LLM)"]
     end
 
-    HTTP --> Limiter --> Controller
+    HTTP --> Nginx --> Limiter --> Controller
     CLI --> Command
 
     Controller -- "Sync Execution" --> Generator
     Command -- "Sync Execution" --> Generator
 
-    Controller -- "Async Dispatch" --> Bus
-    Command -- "Async Dispatch" --> Bus
+    Controller -- "Async Dispatch (UUIDv7)" --> Bus
+    Command -- "Async Dispatch (UUIDv7)" --> Bus
 
     Bus --> Queues --> Handler
-    Handler -- "Update Status" --> JobManager
+    Handler -- "Update Status (Processing / Completed)" --> JobManager
     Handler --> Generator
+    Handler -. "Permanent Failure Event" .-> JobListener --> JobManager
 
-    Generator <-->|"Check / Store Cache (TTL 600s)"| RedisCache
+    Generator <-->|"Check / Store Cache (SHA-256 Multi-Factor)"| RedisCache
     Generator --> Strategy
 
     Factory -. "Instantiates" .-> Strategy
@@ -89,9 +95,9 @@ flowchart TD
 - **Factory Pattern** — `AIClientFactory` dynamically resolves provider based on `AI_PROVIDER` environment variable.
 - **DTOs (Data Transfer Objects)** — Immutable `readonly` Value Objects (`DescriptionRequest`, `AIResponse`).
 - **Builder Pattern** — `PromptBuilder` for customizable, decoupled prompt templates.
-- **Sliding Window Rate Limiter** — Sliding window algorithm (30 req/min) with isolated cache storage.
+- **Sliding Window Rate Limiter** — Sliding window algorithm for both generation (30 req/min) and status polling (120 req/min) with isolated cache storage.
 - **Transport-Agnostic Async Queues** — Non-blocking message dispatch via Symfony Messenger with hot-swappable queue drivers: **Redis** or **RabbitMQ (AMQP)** with automatic retry strategy and dead-letter handling.
-- **Multi-layer Caching** — Intelligent Redis caching of generated descriptions (TTL: 600s).
+- **Multi-factor Versioned Caching** — Collision-resistant SHA-256 Redis caching of generated descriptions based on provider, model, prompt hash, and input features (TTL: 600s).
 
 ---
 
@@ -104,10 +110,11 @@ flowchart TD
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/health` | Service health check and dependency status (Redis, AI provider) |
+| `GET` | `/health` | Lightweight service liveness probe (`{"status": "ok"}`) |
+| `GET` | `/ready` | Service readiness check (verifies Redis and AI provider availability) |
 | `POST` | `/product/descriptions/sync` | Synchronous product description generation |
-| `POST` | `/product/descriptions/async` | Asynchronous job dispatch (returns `job_id`) |
-| `GET` | `/product/descriptions/async/{jobId}` | Poll status of an async generation job |
+| `POST` | `/product/descriptions/async` | Asynchronous job dispatch (returns UUIDv7 `job_id`) |
+| `GET` | `/product/descriptions/async/{jobId}` | Poll status of an async generation job (rate-limited) |
 | `GET` | `/api/docs` | Interactive Swagger UI documentation |
 
 ---
@@ -134,27 +141,38 @@ curl -X POST http://localhost:8000/product/descriptions/async \
 ```
 ```json
 {
-  "job_id": "669f1a2b3c4d5",
+  "job_id": "0195669f-1a2b-7c4d-8e5f-6a7b8c9d0e1f",
   "status": "pending"
 }
 ```
 
 #### 3. Poll Async Job Status
 ```bash
-curl http://localhost:8000/product/descriptions/async/669f1a2b3c4d5
+curl http://localhost:8000/product/descriptions/async/0195669f-1a2b-7c4d-8e5f-6a7b8c9d0e1f
 ```
 ```json
 {
-  "job_id": "669f1a2b3c4d5",
+  "job_id": "0195669f-1a2b-7c4d-8e5f-6a7b8c9d0e1f",
   "status": "completed",
   "description": "The Galaxy Smartphone X delivers flagship performance...",
   "error": null
 }
 ```
 
-#### 4. Health Check
+#### 4. Health & Readiness Checks
 ```bash
+# Liveness (process is alive)
 curl http://localhost:8000/health
+```
+```json
+{
+  "status": "ok"
+}
+```
+
+```bash
+# Readiness (dependencies connected)
+curl http://localhost:8000/ready
 ```
 ```json
 {

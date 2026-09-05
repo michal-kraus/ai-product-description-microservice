@@ -12,11 +12,11 @@
 
 Mikroserwis generujący profesjonalne opisy produktów e-commerce z wykorzystaniem AI (**Ollama** / **Google Gemini**).
 
-Zaprojektowany jako wysoce skalowalny, niezależny serwis w architekturze mikroserwisowej — przyjmuje nazwę i cechy produktu, a zwraca gotowy opis marketingowy wygenerowany przez model językowy, z obsługą cache'owania, rate-limiterem i kolejkami asynchronicznymi.
+Zaprojektowany jako niezależna, zorientowana produkcyjnie implementacja referencyjna w architekturze mikroserwisowej — przyjmuje nazwę i cechy produktu, a zwraca gotowy opis marketingowy wygenerowany przez model językowy, z obsługą cache'owania, rate-limiterem i kolejkami asynchronicznymi.
 
 > [!NOTE]
 > **Projekt referencyjny / Portfolio Showcase**
-> To repozytorium stanowi demonstracyjny mikroserwis klasy produkcyjnej, prezentujący najlepsze praktyki w **PHP 8.5** i **Symfony 8.1**, czystą architekturę (wzorce Strategy, Factory, Builder, DTO), asynchroniczne kolejki wiadomości, rate limiting, rygorystyczną analizę statyczną (PHPStan Level 8) oraz wysokie pokrycie testami (>99%).
+> To repozytorium stanowi demonstracyjny mikroserwis zorientowany produkcyjnie, prezentujący najlepsze praktyki w **PHP 8.5** i **Symfony 8.1**, czystą architekturę (wzorce Strategy, Factory, Builder, DTO), asynchroniczne kolejki wiadomości, rate limiting, rygorystyczną analizę statyczną (PHPStan Level 8) oraz wszechstronne testy automatyczne.
 
 ---
 
@@ -25,16 +25,21 @@ Zaprojektowany jako wysoce skalowalny, niezależny serwis w architekturze mikros
 ```mermaid
 flowchart TD
     subgraph Clients ["Interfejsy wejściowe"]
-        HTTP["REST API (Sync / Async / Health)"]
+        HTTP["REST API (Sync / Async / Health / Ready / Docs)"]
         CLI["Symfony CLI (app:generate-description)"]
     end
 
-    subgraph App ["Warstwa Aplikacji"]
-        Limiter["Rate Limiter (30 req/min)"]
+    subgraph WebServer ["Serwer Web"]
+        Nginx["Nginx 1.27 (Reverse Proxy :8000)"]
+    end
+
+    subgraph App ["Warstwa Aplikacji (PHP-FPM :9000)"]
+        Limiter["Rate Limiter (30 req/min API, 120 req/min Status)"]
         Controller["ProductDescriptionController"]
         Command["GenerateProductDescriptionCommand"]
         Generator["ProductDescriptionGenerator"]
         JobManager["JobStatusManager"]
+        JobListener["JobFailedListener (Messenger)"]
     end
 
     subgraph MessengerLayer ["Kolejki Asynchroniczne (Messenger)"]
@@ -56,20 +61,21 @@ flowchart TD
         GeminiAPI["Google Gemini API (Cloud LLM)"]
     end
 
-    HTTP --> Limiter --> Controller
+    HTTP --> Nginx --> Limiter --> Controller
     CLI --> Command
 
     Controller -- "Tryb synchroniczny" --> Generator
     Command -- "Tryb synchroniczny" --> Generator
 
-    Controller -- "Zlecenie asynchroniczne" --> Bus
-    Command -- "Zlecenie asynchroniczne" --> Bus
+    Controller -- "Zlecenie asynchroniczne (UUIDv7)" --> Bus
+    Command -- "Zlecenie asynchroniczne (UUIDv7)" --> Bus
 
     Bus --> Queues --> Handler
-    Handler -- "Aktualizacja statusu" --> JobManager
+    Handler -- "Aktualizacja statusu (Processing / Completed)" --> JobManager
     Handler --> Generator
+    Handler -. "Zdarzenie ostatecznego błędu" .-> JobListener --> JobManager
 
-    Generator <-->|"Sprawdź / Zapisz cache (TTL 600s)"| RedisCache
+    Generator <-->|"Sprawdź / Zapisz cache (SHA-256 Multi-Factor)"| RedisCache
     Generator --> Strategy
 
     Factory -. "Tworzy instancję" .-> Strategy
@@ -87,11 +93,11 @@ flowchart TD
 
 - **Strategy Pattern** — `AIClientInterface` z wymiennymi implementacjami (`OllamaClient`, `GeminiClient`)
 - **Factory Pattern** — `AIClientFactory` tworzy klienta na podstawie zmiennej środowiskowej `AI_PROVIDER`
-- **DTO (Data Transfer Objects)** — `DescriptionRequest`, `AIResponse` jako niemutowalne (readonly) Value Objects
+- **DTO (Data Transfer Objects)** — `DescriptionRequest`, `AIResponse` jako czyste, niemutowalne (readonly) Value Objects
 - **Builder Pattern** — `PromptBuilder` z dynamicznie konfigurowalnym szablonem promptu
-- **Sliding Window Rate Limiter** — ochrona API (30 req/min) z dedykowaną pulą cache
+- **Sliding Window Rate Limiter** — ochrona API generowania (30 req/min) i odpytywania o status (120 req/min) z dedykowaną pulą cache
 - **Transport-Agnostic Async Queues** — asynchroniczne kolejki wiadomości przez Symfony Messenger z możliwością wyboru brokera: **Redis** lub **RabbitMQ (AMQP)** wraz ze strategią ponowień (retry strategy) oraz dead-letter handling
-- **Multi-layer Cache** — Redis caching wygenerowanych opisów produktów (TTL: 600s)
+- **Multi-factor Cache** — wersjonowany, wieloskładnikowy klucz SHA-256 oparty o providera, model, hash promptu i cechy (TTL: 600s)
 
 ---
 
@@ -104,10 +110,11 @@ flowchart TD
 
 | Metoda | Ścieżka | Opis |
 |---|---|---|
-| `GET` | `/health` | Health check serwisu i zależności (Redis, AI provider) |
+| `GET` | `/health` | Szybki liveness probe serwisu (`{"status": "ok"}`) |
+| `GET` | `/ready` | Sprawdzenie gotowości i zależności (Redis, AI provider) |
 | `POST` | `/product/descriptions/sync` | Synchroniczne wygenerowanie opisu produktu |
-| `POST` | `/product/descriptions/async` | Zlecenie asynchronicznego generowania (zwraca `job_id`) |
-| `GET` | `/product/descriptions/async/{jobId}` | Odpytanie o status zadania asynchronicznego |
+| `POST` | `/product/descriptions/async` | Zlecenie asynchronicznego generowania (zwraca UUIDv7 `job_id`) |
+| `GET` | `/product/descriptions/async/{jobId}` | Odpytanie o status zadania asynchronicznego (rate-limited) |
 | `GET` | `/api/docs` | Interaktywna dokumentacja Swagger UI |
 
 ---
@@ -134,27 +141,38 @@ curl -X POST http://localhost:8000/product/descriptions/async \
 ```
 ```json
 {
-  "job_id": "669f1a2b3c4d5",
+  "job_id": "0195669f-1a2b-7c4d-8e5f-6a7b8c9d0e1f",
   "status": "pending"
 }
 ```
 
 #### 3. Sprawdzenie statusu zadania
 ```bash
-curl http://localhost:8000/product/descriptions/async/669f1a2b3c4d5
+curl http://localhost:8000/product/descriptions/async/0195669f-1a2b-7c4d-8e5f-6a7b8c9d0e1f
 ```
 ```json
 {
-  "job_id": "669f1a2b3c4d5",
+  "job_id": "0195669f-1a2b-7c4d-8e5f-6a7b8c9d0e1f",
   "status": "completed",
   "description": "Smartfon Galaxy X to flagowy model...",
   "error": null
 }
 ```
 
-#### 4. Health Check
+#### 4. Health & Readiness Checks
 ```bash
+# Liveness (sprawdzenie działania procesu PHP)
 curl http://localhost:8000/health
+```
+```json
+{
+  "status": "ok"
+}
+```
+
+```bash
+# Readiness (sprawdzenie dostępności zależności)
+curl http://localhost:8000/ready
 ```
 ```json
 {

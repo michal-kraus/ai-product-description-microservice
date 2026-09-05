@@ -6,7 +6,7 @@ info:
     
     Supports two operating modes:
     - **Synchronous** — response directly contains the generated description
-    - **Asynchronous** — returns a `job_id` for background status polling
+    - **Asynchronous** — returns a `job_id` (UUIDv7) for background status polling
   version: 1.0.0
   contact:
     name: Michał Kraus
@@ -24,7 +24,26 @@ paths:
   /health:
     get:
       operationId: healthCheck
-      summary: Service health check
+      summary: Service liveness probe
+      description: |
+        Lightweight liveness probe checking that the application runtime is alive.
+        Does not execute external I/O requests. Returns `200` with `status: ok`.
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service runtime is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessResponse'
+              example:
+                status: ok
+
+  /ready:
+    get:
+      operationId: readinessCheck
+      summary: Service readiness probe
       description: |
         Verifies the availability of required dependencies (Redis, AI provider).
         Returns `200` when all components are healthy, `503` when any dependency is unavailable.
@@ -32,11 +51,11 @@ paths:
         - Health
       responses:
         '200':
-          description: Service is healthy
+          description: Service is ready to accept traffic
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HealthResponse'
+                $ref: '#/components/schemas/ReadinessResponse'
               example:
                 status: healthy
                 checks:
@@ -51,13 +70,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HealthResponse'
+                $ref: '#/components/schemas/ReadinessResponse'
               example:
                 status: degraded
                 checks:
                   redis:
                     healthy: false
-                    details: 'Connection refused'
+                    details: unavailable
                   ai_provider:
                     healthy: true
                     details: 'provider: ollama'
@@ -120,7 +139,6 @@ paths:
                 $ref: '#/components/schemas/GenerationError'
               example:
                 error: Failed to generate product description.
-                details: 'Connection to Ollama timed out.'
 
   /product/descriptions/async:
     post:
@@ -128,7 +146,7 @@ paths:
       summary: Generate product description (asynchronous)
       description: |
         Dispatches a product description generation job to the background queue.
-        Returns a `job_id` used to poll the job status.
+        Returns a `job_id` (UUIDv7) used to poll the job status.
         Messages are processed asynchronously via Symfony Messenger (Redis or RabbitMQ AMQP transport).
       tags:
         - Product Descriptions
@@ -152,7 +170,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AsyncAcceptedResponse'
               example:
-                job_id: 669f1a2b3c4d5
+                job_id: 0195669f-1a2b-7c4d-8e5f-6a7b8c9d0e1f
                 status: pending
         '400':
           description: Missing or invalid required parameters
@@ -168,6 +186,14 @@ paths:
                 $ref: '#/components/schemas/RateLimitError'
               example:
                 error: 'Too many requests. Please try again later.'
+        '500':
+          description: Dispatch failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationError'
+              example:
+                error: Failed to dispatch async description job.
 
   /product/descriptions/async/{jobId}:
     get:
@@ -176,7 +202,7 @@ paths:
       description: |
         Retrieves the current status of an asynchronous generation job.
         
-        State machine: `created` → `pending` → `processing` → `completed` / `failed`
+        State machine: `pending` → `processing` → `completed` / `failed`
         
         When status is `completed`, the `description` field contains the generated marketing copy.
         When status is `failed`, the `error` field contains the failure reason.
@@ -186,10 +212,10 @@ paths:
         - name: jobId
           in: path
           required: true
-          description: Unique job identifier returned by the async endpoint
+          description: Unique job identifier returned by the async endpoint (UUIDv7)
           schema:
             type: string
-          example: 669f1a2b3c4d5
+          example: 0195669f-1a2b-7c4d-8e5f-6a7b8c9d0e1f
       responses:
         '200':
           description: Current job status
@@ -201,7 +227,7 @@ paths:
                 completed:
                   summary: Job completed successfully
                   value:
-                    job_id: 669f1a2b3c4d5
+                    job_id: 0195669f-1a2b-7c4d-8e5f-6a7b8c9d0e1f
                     status: completed
                     description: >-
                       Smartphone Galaxy X is a premium flagship featuring a 6.7" AMOLED display
@@ -210,17 +236,17 @@ paths:
                 processing:
                   summary: Job is currently being processed
                   value:
-                    job_id: 669f1a2b3c4d5
+                    job_id: 0195669f-1a2b-7c4d-8e5f-6a7b8c9d0e1f
                     status: processing
                     description: null
                     error: null
                 failed:
                   summary: Job execution failed
                   value:
-                    job_id: 669f1a2b3c4d5
+                    job_id: 0195669f-1a2b-7c4d-8e5f-6a7b8c9d0e1f
                     status: failed
                     description: null
-                    error: 'Failed to generate description for product "Smartphone Galaxy X".'
+                    error: 'Job execution failed after all retry attempts.'
         '404':
           description: Job not found
           content:
@@ -230,6 +256,14 @@ paths:
               example:
                 error: Job not found.
                 job_id: non-existent-id
+        '429':
+          description: Status polling rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitError'
+              example:
+                error: 'Too many status check requests. Please try again later.'
 
 components:
   schemas:
@@ -262,7 +296,7 @@ components:
       properties:
         job_id:
           type: string
-          description: Unique job identifier
+          description: Unique job identifier (UUIDv7)
         status:
           type: string
           enum:
@@ -278,7 +312,6 @@ components:
         status:
           type: string
           enum:
-            - created
             - pending
             - processing
             - completed
@@ -293,7 +326,14 @@ components:
           nullable: true
           description: Error message details (available when status = failed)
 
-    HealthResponse:
+    LivenessResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+
+    ReadinessResponse:
       type: object
       properties:
         status:
@@ -333,8 +373,6 @@ components:
       type: object
       properties:
         error:
-          type: string
-        details:
           type: string
 
     JobNotFoundError:
