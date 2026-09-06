@@ -25,6 +25,7 @@ final class GenerateProductDescriptionMessageHandler
         GenerateProductDescriptionMessage $message,
     ): void {
         $this->logger->info('Starting description generation.', [
+            'request_id' => $message->requestId,
             'job_id' => $message->jobId,
             'product' => $message->name,
         ]);
@@ -34,9 +35,14 @@ final class GenerateProductDescriptionMessageHandler
         ]);
 
         try {
-            $description = $this->generator->generate($message->name, $message->features);
+            $description = $this->generator->generate(
+                $message->name,
+                $message->features,
+                $message->requestId,
+            );
         } catch (Throwable $e) {
             $this->logger->error('Description generation attempt failed.', [
+                'request_id' => $message->requestId,
                 'job_id' => $message->jobId,
                 'product' => $message->name,
                 'error' => $e->getMessage(),

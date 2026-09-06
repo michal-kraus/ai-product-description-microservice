@@ -29,7 +29,7 @@ class ProductDescriptionGenerator
         private string $provider = 'default',
     ) {}
 
-    public function generate(string $productName, string $productFeatures): string
+    public function generate(string $productName, string $productFeatures, ?string $requestId = null): string
     {
         $prompt = $this->promptBuilder->build($productName, $productFeatures);
         $descriptionRequest = new DescriptionRequest($productName, $productFeatures, $prompt);
@@ -38,11 +38,12 @@ class ProductDescriptionGenerator
 
         try {
             $cacheHit = true;
-            $description = $this->productDescriptionCache->get($cacheKey, function (ItemInterface $item) use ($descriptionRequest, $productName, &$cacheHit): string {
+            $description = $this->productDescriptionCache->get($cacheKey, function (ItemInterface $item) use ($descriptionRequest, $productName, $requestId, &$cacheHit): string {
                 $cacheHit = false;
                 $item->expiresAfter($this->cacheTtl);
 
                 $this->logger?->info('Generating description via AI client.', [
+                    'request_id' => $requestId,
                     'product' => $productName,
                 ]);
 
@@ -56,12 +57,14 @@ class ProductDescriptionGenerator
 
             if ($cacheHit) {
                 $this->logger?->debug('Description served from cache.', [
+                    'request_id' => $requestId,
                     'product' => $productName,
                     'cache_key' => $cacheKey,
                 ]);
             }
         } catch (Throwable $e) {
             $this->logger?->error('Failed to generate product description.', [
+                'request_id' => $requestId,
                 'product' => $productName,
                 'error' => $e->getMessage(),
             ]);

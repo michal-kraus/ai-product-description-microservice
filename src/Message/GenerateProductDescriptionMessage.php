@@ -10,5 +10,6 @@ final readonly class GenerateProductDescriptionMessage
         public string $jobId,
         public string $name,
         public string $features,
+        public ?string $requestId = null,
     ) {}
 }

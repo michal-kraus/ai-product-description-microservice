@@ -29,6 +29,7 @@ final readonly class JobFailedListener
 
         if ($event->willRetry()) {
             $this->logger->warning('Async description job failed, retry scheduled by Messenger.', [
+                'request_id' => $message->requestId,
                 'job_id' => $message->jobId,
                 'product' => $message->name,
                 'error' => $event->getThrowable()->getMessage(),
@@ -38,6 +39,7 @@ final readonly class JobFailedListener
         }
 
         $this->logger->error('Async description job failed permanently after retries exhausted.', [
+            'request_id' => $message->requestId,
             'job_id' => $message->jobId,
             'product' => $message->name,
             'error' => $event->getThrowable()->getMessage(),

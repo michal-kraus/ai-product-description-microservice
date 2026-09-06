@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use App\DTO\GenerateProductDescriptionRequest;
 use App\Enum\GenerateProductDescriptionMessageStatus;
+use App\EventListener\RequestIdListener;
 use App\Message\GenerateProductDescriptionMessage;
 use App\Service\JobStatusManager;
 use App\Service\ProductDescriptionGenerator;
@@ -43,13 +44,17 @@ final class ProductDescriptionController extends AbstractController
             return $rateLimitResponse;
         }
 
+        $requestId = $this->extractRequestId($request);
+
         try {
             $description = $generator->generate(
                 $productDescriptionRequest->name,
                 $productDescriptionRequest->features,
+                $requestId,
             );
         } catch (Throwable $e) {
             $this->logger->error('Sync description generation failed.', [
+                'request_id' => $requestId,
                 'product' => $productDescriptionRequest->name,
                 'exception' => $e,
             ]);
@@ -76,6 +81,7 @@ final class ProductDescriptionController extends AbstractController
             return $rateLimitResponse;
         }
 
+        $requestId = $this->extractRequestId($request);
         $jobId = Uuid::v7()->toRfc4122();
         $jobStatusManager->createJob($jobId);
 
@@ -84,6 +90,7 @@ final class ProductDescriptionController extends AbstractController
                 $jobId,
                 $productDescriptionRequest->name,
                 $productDescriptionRequest->features,
+                $requestId,
             ));
         } catch (Throwable $e) {
             $jobStatusManager->updateJob($jobId, [
@@ -92,6 +99,7 @@ final class ProductDescriptionController extends AbstractController
             ]);
 
             $this->logger->error('Failed to dispatch async description job.', [
+                'request_id' => $requestId,
                 'job_id' => $jobId,
                 'product' => $productDescriptionRequest->name,
                 'exception' => $e,
@@ -103,6 +111,7 @@ final class ProductDescriptionController extends AbstractController
         }
 
         $this->logger->info('Async description job dispatched.', [
+            'request_id' => $requestId,
             'job_id' => $jobId,
             'product' => $productDescriptionRequest->name,
         ]);
@@ -146,6 +155,7 @@ final class ProductDescriptionController extends AbstractController
 
         if (!$limiter->consume()->isAccepted()) {
             $this->logger->warning('Rate limit exceeded.', [
+                'request_id' => $this->extractRequestId($request),
                 'ip' => $request->getClientIp(),
             ]);
 
@@ -163,6 +173,7 @@ final class ProductDescriptionController extends AbstractController
 
         if (!$limiter->consume()->isAccepted()) {
             $this->logger->warning('Status polling rate limit exceeded.', [
+                'request_id' => $this->extractRequestId($request),
                 'ip' => $request->getClientIp(),
             ]);
 
@@ -172,5 +183,12 @@ final class ProductDescriptionController extends AbstractController
         }
 
         return null;
+    }
+
+    private function extractRequestId(Request $request): ?string
+    {
+        $requestId = $request->attributes->get(RequestIdListener::REQUEST_ID_ATTRIBUTE);
+
+        return \is_string($requestId) && $requestId !== '' ? $requestId : null;
     }
 }

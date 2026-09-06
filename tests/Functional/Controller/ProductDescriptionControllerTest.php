@@ -66,6 +66,7 @@ final class ProductDescriptionControllerTest extends WebTestCase
 
         self::assertResponseIsSuccessful();
         self::assertResponseHeaderSame('content-type', 'application/json');
+        self::assertTrue($this->client->getResponse()->headers->has('X-Request-ID'));
 
         $responseData = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertSame($mockedOutput, $responseData['description']);
@@ -87,6 +88,7 @@ final class ProductDescriptionControllerTest extends WebTestCase
         ]);
         self::assertResponseStatusCodeSame(Response::HTTP_ACCEPTED);
         self::assertResponseHeaderSame('content-type', 'application/json');
+        self::assertTrue($this->client->getResponse()->headers->has('X-Request-ID'));
         $response = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertArrayHasKey('job_id', $response);
         self::assertSame(GenerateProductDescriptionMessageStatus::PENDING->value, $response['status']);
@@ -98,6 +100,7 @@ final class ProductDescriptionControllerTest extends WebTestCase
         self::assertSame($response['job_id'], $message->jobId);
         self::assertSame($expectedName, $message->name);
         self::assertSame($expectedFeatures, $message->features);
+        self::assertSame($this->client->getResponse()->headers->get('X-Request-ID'), $message->requestId);
     }
 
     public function testItReturns404ForNonExistentJob(): void
@@ -239,6 +242,30 @@ final class ProductDescriptionControllerTest extends WebTestCase
         self::assertStringContainsString('Too many requests', $response['error']);
     }
 
+    public function testItReturns429WhenAsyncRateLimitIsExceeded(): void
+    {
+        $this->client->disableReboot();
+
+        $asyncUrl = $this->router->generate('app_product_descriptions_async');
+
+        for ($i = 0; $i < 10; $i++) {
+            $this->client->request('POST', $asyncUrl, [
+                'name' => 'Product',
+                'features' => 'Features',
+            ]);
+            self::assertResponseStatusCodeSame(Response::HTTP_ACCEPTED);
+        }
+
+        $this->client->request('POST', $asyncUrl, [
+            'name' => 'Product',
+            'features' => 'Features',
+        ]);
+
+        self::assertResponseStatusCodeSame(Response::HTTP_TOO_MANY_REQUESTS);
+        $response = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertStringContainsString('Too many requests', $response['error']);
+    }
+
     public function testItReturns429WhenStatusRateLimitIsExceeded(): void
     {
         $this->client->disableReboot();
@@ -288,5 +315,23 @@ final class ProductDescriptionControllerTest extends WebTestCase
         self::assertResponseStatusCodeSame(Response::HTTP_INTERNAL_SERVER_ERROR);
         $response = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertSame('Failed to dispatch async description job.', $response['error']);
+    }
+
+    public function testItPropagatesCustomRequestIdHeader(): void
+    {
+        $aiClientMock = $this->createStub(AIClientInterface::class);
+        $aiClientMock->method('generateDescription')->willReturn(new AIResponse('Custom output'));
+        static::getContainer()->set(AIClientInterface::class, $aiClientMock);
+
+        $customId = 'trace-id-abc-123';
+        $this->client->request(
+            'POST',
+            $this->router->generate('app_product_descriptions_sync'),
+            parameters: ['name' => 'Name', 'features' => 'Features'],
+            server: ['HTTP_X-Request-ID' => $customId],
+        );
+
+        self::assertResponseIsSuccessful();
+        self::assertSame($customId, $this->client->getResponse()->headers->get('X-Request-ID'));
     }
 }
