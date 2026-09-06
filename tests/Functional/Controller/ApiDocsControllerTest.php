@@ -19,7 +19,10 @@ final class ApiDocsControllerTest extends WebTestCase
 
         self::assertResponseIsSuccessful();
         self::assertResponseHeaderSame('content-type', 'text/html; charset=utf-8');
-        self::assertStringContainsString('swagger-ui', (string) $client->getResponse()->getContent());
+        $content = (string) $client->getResponse()->getContent();
+        self::assertStringContainsString('/swagger-ui/swagger-ui-bundle.js', $content);
+        self::assertStringContainsString('/swagger-ui/swagger-ui.css', $content);
+        self::assertStringNotContainsString('unpkg.com', $content);
     }
 
     public function testItServesOpenApiSpec(): void

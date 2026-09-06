@@ -8,10 +8,10 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\KernelInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
-final class ApiDocsController
+final readonly class ApiDocsController
 {
     public function __construct(
-        private readonly KernelInterface $kernel,
+        private KernelInterface $kernel,
     ) {}
 
     #[Route('/api/docs', name: 'app_api_docs', methods: ['GET'])]
@@ -23,8 +23,8 @@ final class ApiDocsController
             <head>
                 <meta charset="UTF-8">
                 <title>Product Description Microservice - API Docs</title>
-                <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
-                <link rel="icon" type="image/png" href="https://unpkg.com/swagger-ui-dist@5/favicon-32x32.png" sizes="32x32" />
+                <link rel="stylesheet" href="/swagger-ui/swagger-ui.css" />
+                <link rel="icon" type="image/png" href="/swagger-ui/favicon-32x32.png" sizes="32x32" />
                 <style>
                     body { margin: 0; padding: 0; background: #fafafa; }
                     .swagger-ui .topbar { display: none; }
@@ -32,8 +32,8 @@ final class ApiDocsController
             </head>
             <body>
                 <div id="swagger-ui"></div>
-                <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-                <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+                <script src="/swagger-ui/swagger-ui-bundle.js"></script>
+                <script src="/swagger-ui/swagger-ui-standalone-preset.js"></script>
                 <script>
                     window.onload = function() {
                         SwaggerUIBundle({
