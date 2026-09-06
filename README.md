@@ -102,6 +102,7 @@ flowchart TD
 - **Distributed Concurrency & Locking** — Symfony Lock integration with `LockFactory` enforcing guaranteed atomic read-modify-write state transitions in `JobStatusManager` across multiple concurrent workers.
 - **Unified Async Job Dispatcher** — `ProductDescriptionJobDispatcher` encapsulating UUIDv7 generation, job state initialization, bus dispatching, and failure rollback for both REST API and CLI.
 - **Sliding Window Rate Limiter** — Sliding window algorithm for both generation (30 req/min) and status polling (120 req/min) with isolated cache storage and unified controller consumption.
+- **Stateless Access Token Authentication** — Native Symfony Security `access_token` firewall with `AccessTokenHandlerInterface`, constant-time token comparison (`hash_equals`), and per-client isolated rate limiting.
 - **Transport-Agnostic Async Queues** — Non-blocking message dispatch via Symfony Messenger with hot-swappable queue drivers: **Redis** or **RabbitMQ (AMQP)** with automatic retry strategy and dead-letter handling.
 - **Multi-factor Versioned Caching** — Fast, collision-resistant xxh128 Redis caching of generated descriptions based on cache version, provider, model, prompt, and input features (TTL: 600s).
 - **Request Correlation & Observability** — End-to-end distributed tracing via `X-Request-ID` header (UUID v7) propagated across HTTP requests, responses, async Messenger envelopes, and structured log contexts.
@@ -288,23 +289,23 @@ make worker
 
 ## 🧪 Testing & Code Quality
 
-The project includes **123 automated tests** (Unit + Functional) with **100% code coverage**:
+The project includes **139 automated tests** (Unit + Functional) with **100% code coverage**:
 
 ```bash
 make check
 ```
 
 Results:
-* **PHPStan Level 8**: `[OK] No errors` (56 files analyzed)
-* **PHPUnit 13**: `OK (123 tests, 447 assertions)`
-* **Code Coverage**: `100.00% lines covered`
+* **PHPStan Level 8**: `[OK] No errors` (59 files analyzed)
+* **PHPUnit 13**: `OK (139 tests, 495 assertions)`
+* **Code Coverage**: `100.00% lines covered` (Classes: 26/26, Methods: 68/68, Lines: 491/491)
 
 ---
 
 ## ⚙️ Tech Stack
 
 - **PHP 8.5** — `declare(strict_types=1)`, `readonly` classes, enums, match expressions, constructor promotion
-- **Symfony 8.1** — Framework, Messenger, RateLimiter, Cache, HttpClient, Console, Serializer, Lock
+- **Symfony 8.1** — Framework, Security, Messenger, RateLimiter, Cache, HttpClient, Console, Serializer, Lock
 - **RabbitMQ & Redis** — transport-agnostic async message queuing via AMQP/Redis, description caching, rate limiter storage, distributed mutex locking
 - **Ollama** — self-hosted local AI inference engine
 - **Google Gemini API** — cloud LLM provider
@@ -357,6 +358,8 @@ src/
 │   └── GenerateProductDescriptionMessage.php       # Async message DTO
 ├── MessageHandler/
 │   └── GenerateProductDescriptionMessageHandler.php # Async queue consumer
+├── Security/
+│   └── AccessTokenHandler.php                    # Native Symfony access_token Bearer handler
 └── Service/
     ├── JobStatusManager.php                      # Concurrency-safe job state manager (Symfony Lock)
     ├── JobStatusManagerInterface.php             # Job lifecycle persistence contract

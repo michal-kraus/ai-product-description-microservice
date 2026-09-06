@@ -102,6 +102,7 @@ flowchart TD
 - **Współbieżność i Rozproszone Blokady (Locking)** — integracja `Symfony Lock` z `LockFactory` gwarantująca bezwzględną atomowość operacji read-modify-write w `JobStatusManager` w środowisku z wieloma workerami.
 - **Ujednolicona Orkiestracja Zadań (Job Dispatcher)** — `ProductDescriptionJobDispatcher` hermetyzuje generowanie UUIDv7, inicjalizację stanu w cache, dispatch do Messengera oraz obsługę awarii dla API i CLI.
 - **Sliding Window Rate Limiter** — ochrona API generowania (30 req/min) i odpytywania o status (120 req/min) z dedykowaną pulą cache i sparametryzowaną weryfikacją w kontrolerze.
+- **Bezstanowe uwierzytelnianie Access Token (Bearer)** — natywny firewall Symfony Security `access_token` z implementacją `AccessTokenHandlerInterface`, stałoczasowym porównywaniem tokenów (`hash_equals`) oraz per-client rate limitingiem.
 - **Transport-Agnostic Async Queues** — asynchroniczne kolejki wiadomości przez Symfony Messenger z możliwością wyboru brokera: **Redis** lub **RabbitMQ (AMQP)** wraz ze strategią ponowień (retry strategy) oraz dead-letter handling.
 - **Wieloskładnikowy Cache z Wersjonowaniem** — szybkie, odporne na kolizje hashowanie xxh128 w Redis dla wygenerowanych opisów w oparciu o wersję cache, providera, model, prompt i cechy (TTL: 600s).
 - **Korelacja żądań i obserwowalność (Observability)** — śledzenie żądań end-to-end za pomocą nagłówka `X-Request-ID` (UUID v7), propagowanego w nagłówkach HTTP, kopertach asynchronicznych wiadomości Messengera oraz w logach.
@@ -288,23 +289,23 @@ make worker
 
 ## 🧪 Testy i jakość kodu
 
-Projekt posiada **123 testy automatyczne** (Unit + Functional) ze **100% pokryciem kodu**:
+Projekt posiada **139 testów automatycznych** (Unit + Functional) ze **100% pokryciem kodu**:
 
 ```bash
 make check
 ```
 
 Wyniki:
-* **PHPStan Poziom 8**: `[OK] No errors` (56 przeanalizowanych plików)
-* **PHPUnit 13**: `OK (123 tests, 447 assertions)`
-* **Pokrycie kodu**: `100.00% linii pokrytych`
+* **PHPStan Poziom 8**: `[OK] No errors` (59 przeanalizowanych plików)
+* **PHPUnit 13**: `OK (139 tests, 495 assertions)`
+* **Pokrycie kodu**: `100.00% linii pokrytych` (Klasy: 26/26, Metody: 68/68, Linie: 491/491)
 
 ---
 
 ## ⚙️ Stos technologiczny
 
 - **PHP 8.5** — `declare(strict_types=1)`, `readonly` classes, enums, match expressions, constructor promotion
-- **Symfony 8.1** — Framework, Messenger, RateLimiter, Cache, HttpClient, Console, Serializer, Lock
+- **Symfony 8.1** — Framework, Security, Messenger, RateLimiter, Cache, HttpClient, Console, Serializer, Lock
 - **RabbitMQ & Redis** — transport-agnostic async message queuing przez AMQP/Redis, cache opisów produktów, rate limiter storage, rozproszony mutex
 - **Ollama** — lokalny serwer AI (self-hosted LLM)
 - **Google Gemini API** — chmurowy dostawca modeli LLM
@@ -357,6 +358,8 @@ src/
 │   └── GenerateProductDescriptionMessage.php       # DTO wiadomości asynchronicznej
 ├── MessageHandler/
 │   └── GenerateProductDescriptionMessageHandler.php # Konsument wiadomości kolejki
+├── Security/
+│   └── AccessTokenHandler.php                    # Natywny handler tokenów Bearer Symfony access_token
 └── Service/
     ├── JobStatusManager.php                      # Współbieżny menedżer stanu zadań (Symfony Lock)
     ├── JobStatusManagerInterface.php             # Kontrakt zarządzania cyklem życia zadań
