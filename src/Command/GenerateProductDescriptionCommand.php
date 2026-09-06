@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace App\Command;
 
-use App\Enum\GenerateProductDescriptionMessageStatus;
-use App\Message\GenerateProductDescriptionMessage;
-use App\Service\JobStatusManager;
+use App\Exception\JobDispatchException;
 use App\Service\ProductDescriptionGenerator;
+use App\Service\ProductDescriptionJobDispatcherInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -15,8 +14,6 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
-use Symfony\Component\Messenger\MessageBusInterface;
-use Symfony\Component\Uid\Uuid;
 use Throwable;
 
 #[AsCommand(
@@ -27,8 +24,7 @@ final class GenerateProductDescriptionCommand extends Command
 {
     public function __construct(
         private readonly ProductDescriptionGenerator $generator,
-        private readonly MessageBusInterface $messageBus,
-        private readonly JobStatusManager $jobStatusManager,
+        private readonly ProductDescriptionJobDispatcherInterface $jobDispatcher,
     ) {
         parent::__construct();
     }
@@ -63,16 +59,9 @@ final class GenerateProductDescriptionCommand extends Command
         );
 
         if ($isAsync) {
-            $jobId = Uuid::v7()->toRfc4122();
-            $this->jobStatusManager->createJob($jobId);
-
             try {
-                $this->messageBus->dispatch(new GenerateProductDescriptionMessage($jobId, $name, $features));
-            } catch (Throwable $e) {
-                $this->jobStatusManager->updateJob($jobId, [
-                    'status' => GenerateProductDescriptionMessageStatus::FAILED->value,
-                    'error' => 'Unable to dispatch job.',
-                ]);
+                $jobId = $this->jobDispatcher->dispatch($name, $features);
+            } catch (JobDispatchException $e) {
                 $io->error(\sprintf('Failed to dispatch job: %s', $e->getMessage()));
 
                 return Command::FAILURE;
