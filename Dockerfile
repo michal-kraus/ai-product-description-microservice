@@ -1,6 +1,8 @@
 # ---- Stage 1: Base PHP runtime with all required extensions ----
 FROM php:8.5-fpm-alpine AS base
 
+# Install native C extensions (amqp, redis) for high-performance messaging and Redis caching;
+# predis package acts as a pure-PHP fallback where native extensions are unavailable.
 RUN apk add --no-cache icu-libs rabbitmq-c \
     && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev rabbitmq-c-dev linux-headers \
     && pecl install amqp redis \
