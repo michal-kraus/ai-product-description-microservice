@@ -7,8 +7,10 @@ namespace App\Tests\Unit\Service;
 use App\Enum\GenerateProductDescriptionMessageStatus;
 use App\Service\JobStatusManager;
 use DomainException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
+use ValueError;
 
 class JobStatusManagerTest extends TestCase
 {
@@ -58,24 +60,129 @@ class JobStatusManagerTest extends TestCase
         $this->assertArrayHasKey('updated_at', $updatedJobData);
     }
 
-    public function testItThrowsOnInvalidStateTransition(): void
-    {
-        $jobId = 'job-terminal';
-        $this->manager->createJob($jobId);
+    #[DataProvider('provideValidTransitions')]
+    public function testValidTransitions(
+        GenerateProductDescriptionMessageStatus $from,
+        GenerateProductDescriptionMessageStatus $to,
+    ): void {
+        $jobId = 'job-valid-' . $from->value . '-' . $to->value;
 
-        $this->manager->updateJob($jobId, [
-            'status' => GenerateProductDescriptionMessageStatus::PROCESSING->value,
-        ]);
-        $this->manager->updateJob($jobId, [
-            'status' => GenerateProductDescriptionMessageStatus::COMPLETED->value,
-        ]);
+        $this->manager->createJob($jobId);
+        if ($from !== GenerateProductDescriptionMessageStatus::PENDING) {
+            $this->manager->updateJob($jobId, ['status' => GenerateProductDescriptionMessageStatus::PROCESSING->value]);
+            if ($from !== GenerateProductDescriptionMessageStatus::PROCESSING) {
+                $this->manager->updateJob($jobId, ['status' => $from->value]);
+            }
+        }
+
+        $this->manager->updateJob($jobId, ['status' => $to->value]);
+
+        $job = $this->manager->getJob($jobId);
+        $this->assertNotNull($job);
+        $this->assertSame($to->value, $job['status']);
+    }
+
+    /**
+     * @return array<string, array{GenerateProductDescriptionMessageStatus, GenerateProductDescriptionMessageStatus}>
+     */
+    public static function provideValidTransitions(): array
+    {
+        return [
+            'PENDING to PROCESSING' => [
+                GenerateProductDescriptionMessageStatus::PENDING,
+                GenerateProductDescriptionMessageStatus::PROCESSING,
+            ],
+            'PENDING to FAILED' => [
+                GenerateProductDescriptionMessageStatus::PENDING,
+                GenerateProductDescriptionMessageStatus::FAILED,
+            ],
+            'PROCESSING to COMPLETED' => [
+                GenerateProductDescriptionMessageStatus::PROCESSING,
+                GenerateProductDescriptionMessageStatus::COMPLETED,
+            ],
+            'PROCESSING to FAILED' => [
+                GenerateProductDescriptionMessageStatus::PROCESSING,
+                GenerateProductDescriptionMessageStatus::FAILED,
+            ],
+            'PROCESSING to PROCESSING (retry idempotent)' => [
+                GenerateProductDescriptionMessageStatus::PROCESSING,
+                GenerateProductDescriptionMessageStatus::PROCESSING,
+            ],
+        ];
+    }
+
+    #[DataProvider('provideInvalidTransitions')]
+    public function testInvalidTransitions(
+        GenerateProductDescriptionMessageStatus $from,
+        GenerateProductDescriptionMessageStatus $to,
+    ): void {
+        $jobId = 'job-invalid-' . $from->value . '-' . $to->value;
+
+        $this->manager->createJob($jobId);
+        if ($from !== GenerateProductDescriptionMessageStatus::PENDING) {
+            $this->manager->updateJob($jobId, ['status' => GenerateProductDescriptionMessageStatus::PROCESSING->value]);
+            if ($from !== GenerateProductDescriptionMessageStatus::PROCESSING) {
+                $this->manager->updateJob($jobId, ['status' => $from->value]);
+            }
+        }
 
         $this->expectException(DomainException::class);
-        $this->expectExceptionMessage('Invalid job status transition from "completed" to "processing"');
+        $this->expectExceptionMessage(\sprintf('Invalid job status transition from "%s" to "%s".', $from->value, $to->value));
 
-        $this->manager->updateJob($jobId, [
-            'status' => GenerateProductDescriptionMessageStatus::PROCESSING->value,
-        ]);
+        $this->manager->updateJob($jobId, ['status' => $to->value]);
+    }
+
+    /**
+     * @return array<string, array{GenerateProductDescriptionMessageStatus, GenerateProductDescriptionMessageStatus}>
+     */
+    public static function provideInvalidTransitions(): array
+    {
+        return [
+            'PENDING to COMPLETED' => [
+                GenerateProductDescriptionMessageStatus::PENDING,
+                GenerateProductDescriptionMessageStatus::COMPLETED,
+            ],
+            'PENDING to PENDING' => [
+                GenerateProductDescriptionMessageStatus::PENDING,
+                GenerateProductDescriptionMessageStatus::PENDING,
+            ],
+            'PROCESSING to PENDING' => [
+                GenerateProductDescriptionMessageStatus::PROCESSING,
+                GenerateProductDescriptionMessageStatus::PENDING,
+            ],
+            'COMPLETED to PENDING' => [
+                GenerateProductDescriptionMessageStatus::COMPLETED,
+                GenerateProductDescriptionMessageStatus::PENDING,
+            ],
+            'COMPLETED to PROCESSING' => [
+                GenerateProductDescriptionMessageStatus::COMPLETED,
+                GenerateProductDescriptionMessageStatus::PROCESSING,
+            ],
+            'COMPLETED to FAILED' => [
+                GenerateProductDescriptionMessageStatus::COMPLETED,
+                GenerateProductDescriptionMessageStatus::FAILED,
+            ],
+            'COMPLETED to COMPLETED' => [
+                GenerateProductDescriptionMessageStatus::COMPLETED,
+                GenerateProductDescriptionMessageStatus::COMPLETED,
+            ],
+            'FAILED to PENDING' => [
+                GenerateProductDescriptionMessageStatus::FAILED,
+                GenerateProductDescriptionMessageStatus::PENDING,
+            ],
+            'FAILED to PROCESSING' => [
+                GenerateProductDescriptionMessageStatus::FAILED,
+                GenerateProductDescriptionMessageStatus::PROCESSING,
+            ],
+            'FAILED to COMPLETED' => [
+                GenerateProductDescriptionMessageStatus::FAILED,
+                GenerateProductDescriptionMessageStatus::COMPLETED,
+            ],
+            'FAILED to FAILED' => [
+                GenerateProductDescriptionMessageStatus::FAILED,
+                GenerateProductDescriptionMessageStatus::FAILED,
+            ],
+        ];
     }
 
     public function testItAcceptsEnumInstanceInUpdateJob(): void
@@ -94,5 +201,17 @@ class JobStatusManagerTest extends TestCase
     public function testItReturnsNullForNonExistentJob(): void
     {
         $this->assertNull($this->manager->getJob('non-existent-job-id'));
+    }
+
+    public function testItThrowsValueErrorOnInvalidStatusString(): void
+    {
+        $jobId = 'job-invalid-status';
+        $this->manager->createJob($jobId);
+
+        $this->expectException(ValueError::class);
+
+        $this->manager->updateJob($jobId, [
+            'status' => 'non_existent_status',
+        ]);
     }
 }

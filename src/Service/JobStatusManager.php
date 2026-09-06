@@ -10,6 +10,16 @@ use DateTimeInterface;
 use DomainException;
 use Psr\Cache\CacheItemPoolInterface;
 
+/**
+ * Manages the lifecycle and state transitions of asynchronous description jobs.
+ *
+ * Concurrency Note:
+ * State transitions are guarded via domain rules in GenerateProductDescriptionMessageStatus.
+ * Persistence uses a read-modify-write pattern backed by PSR-6 cache (e.g. Redis).
+ * For high-concurrency multi-worker deployments where race conditions during
+ * duplicate deliveries could occur, a transactional store or Redis Lua script execution
+ * can be integrated.
+ */
 class JobStatusManager
 {
     public const KEY_PREFIX = 'job_';
@@ -40,15 +50,16 @@ class JobStatusManager
         $existing = $item->isHit() ? (array) $item->get() : [];
 
         if (isset($data['status'])) {
-            if ($data['status'] instanceof GenerateProductDescriptionMessageStatus) {
-                $data['status'] = $data['status']->value;
-            }
+            $newStatus = $data['status'] instanceof GenerateProductDescriptionMessageStatus
+                ? $data['status']
+                : GenerateProductDescriptionMessageStatus::from((string) $data['status']);
 
-            if (isset($existing['status']) && \is_string($existing['status']) && \is_string($data['status'])) {
+            $data['status'] = $newStatus->value;
+
+            if (isset($existing['status']) && \is_string($existing['status'])) {
                 $currentStatus = GenerateProductDescriptionMessageStatus::tryFrom($existing['status']);
-                $newStatus = GenerateProductDescriptionMessageStatus::tryFrom($data['status']);
 
-                if ($currentStatus !== null && $newStatus !== null && !$currentStatus->canTransitionTo($newStatus)) {
+                if ($currentStatus !== null && !$currentStatus->canTransitionTo($newStatus)) {
                     throw new DomainException(\sprintf(
                         'Invalid job status transition from "%s" to "%s".',
                         $currentStatus->value,
