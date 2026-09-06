@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\DTO\JobStatus;
+
 interface JobStatusManagerInterface
 {
     public function createJob(string $jobId): void;
@@ -13,8 +15,5 @@ interface JobStatusManagerInterface
      */
     public function updateJob(string $jobId, array $data): void;
 
-    /**
-     * @return array<string, mixed>|null
-     */
-    public function getJob(string $jobId): ?array;
+    public function getJob(string $jobId): ?JobStatus;
 }

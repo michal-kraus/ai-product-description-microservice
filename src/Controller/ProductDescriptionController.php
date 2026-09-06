@@ -113,9 +113,9 @@ final class ProductDescriptionController extends AbstractController
             return $rateLimitResponse;
         }
 
-        $jobData = $jobStatusManager->getJob($jobId);
+        $job = $jobStatusManager->getJob($jobId);
 
-        if ($jobData === null) {
+        if ($job === null) {
             return $this->json(
                 new ApiErrorResponse('Job not found.', jobId: $jobId),
                 Response::HTTP_NOT_FOUND,
@@ -124,9 +124,9 @@ final class ProductDescriptionController extends AbstractController
 
         return $this->json(new AsyncJobStatusResponse(
             jobId: $jobId,
-            status: (string) $jobData['status'],
-            description: isset($jobData['description']) ? (string) $jobData['description'] : null,
-            error: isset($jobData['error']) ? (string) $jobData['error'] : null,
+            status: $job->status->value,
+            description: $job->description,
+            error: $job->error,
         ));
     }
 

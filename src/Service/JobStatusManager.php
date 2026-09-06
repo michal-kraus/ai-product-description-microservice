@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\DTO\JobStatus;
 use App\Enum\GenerateProductDescriptionMessageStatus;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -11,7 +12,7 @@ use DomainException;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\Lock\LockFactory;
 
-class JobStatusManager implements JobStatusManagerInterface
+final readonly class JobStatusManager implements JobStatusManagerInterface
 {
     public const KEY_PREFIX = 'job_';
     public const DEFAULT_TTL = 3600;
@@ -78,10 +79,7 @@ class JobStatusManager implements JobStatusManagerInterface
         }
     }
 
-    /**
-     * @return array<string, mixed>|null
-     */
-    public function getJob(string $jobId): ?array
+    public function getJob(string $jobId): ?JobStatus
     {
         $item = $this->messengerJobsCache->getItem(self::KEY_PREFIX . $jobId);
         if (!$item->isHit()) {
@@ -89,7 +87,10 @@ class JobStatusManager implements JobStatusManagerInterface
         }
 
         $data = $item->get();
+        if (!\is_array($data)) {
+            return null;
+        }
 
-        return \is_array($data) ? $data : null;
+        return JobStatus::fromArray($jobId, $data);
     }
 }

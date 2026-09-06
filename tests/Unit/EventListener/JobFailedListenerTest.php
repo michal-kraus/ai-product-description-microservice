@@ -58,7 +58,7 @@ class JobFailedListenerTest extends TestCase
 
         $jobData = $this->jobStatusManager->getJob($jobId);
         $this->assertNotNull($jobData);
-        $this->assertSame(GenerateProductDescriptionMessageStatus::PROCESSING->value, $jobData['status']);
+        $this->assertSame(GenerateProductDescriptionMessageStatus::PROCESSING, $jobData->status);
     }
 
     public function testItMarksJobAsFailedWhenRetriesAreExhausted(): void
@@ -79,7 +79,7 @@ class JobFailedListenerTest extends TestCase
 
         $jobData = $this->jobStatusManager->getJob($jobId);
         $this->assertNotNull($jobData);
-        $this->assertSame(GenerateProductDescriptionMessageStatus::FAILED->value, $jobData['status']);
-        $this->assertSame('Job execution failed after all retry attempts.', $jobData['error']);
+        $this->assertSame(GenerateProductDescriptionMessageStatus::FAILED, $jobData->status);
+        $this->assertSame('Job execution failed after all retry attempts.', $jobData->error);
     }
 }

@@ -33,8 +33,8 @@ class JobStatusManagerTest extends TestCase
         $jobData = $this->manager->getJob($jobId);
 
         $this->assertNotNull($jobData);
-        $this->assertSame(GenerateProductDescriptionMessageStatus::PENDING->value, $jobData['status']);
-        $this->assertArrayHasKey('created_at', $jobData);
+        $this->assertSame(GenerateProductDescriptionMessageStatus::PENDING, $jobData->status);
+        $this->assertNotNull($jobData->createdAt);
     }
 
     public function testItUpdatesJobAndPreservesCreatedAt(): void
@@ -43,7 +43,7 @@ class JobStatusManagerTest extends TestCase
         $this->manager->createJob($jobId);
         $initialJobData = $this->manager->getJob($jobId);
         $this->assertNotNull($initialJobData);
-        $initialCreatedAt = $initialJobData['created_at'];
+        $initialCreatedAt = $initialJobData->createdAt;
 
         $this->manager->updateJob($jobId, [
             'status' => GenerateProductDescriptionMessageStatus::PROCESSING->value,
@@ -56,10 +56,10 @@ class JobStatusManagerTest extends TestCase
 
         $updatedJobData = $this->manager->getJob($jobId);
         $this->assertNotNull($updatedJobData);
-        $this->assertSame(GenerateProductDescriptionMessageStatus::COMPLETED->value, $updatedJobData['status']);
-        $this->assertSame('Test description', $updatedJobData['description']);
-        $this->assertSame($initialCreatedAt, $updatedJobData['created_at']);
-        $this->assertArrayHasKey('updated_at', $updatedJobData);
+        $this->assertSame(GenerateProductDescriptionMessageStatus::COMPLETED, $updatedJobData->status);
+        $this->assertSame('Test description', $updatedJobData->description);
+        $this->assertSame($initialCreatedAt, $updatedJobData->createdAt);
+        $this->assertNotNull($updatedJobData->updatedAt);
     }
 
     #[DataProvider('provideValidTransitions')]
@@ -81,7 +81,7 @@ class JobStatusManagerTest extends TestCase
 
         $job = $this->manager->getJob($jobId);
         $this->assertNotNull($job);
-        $this->assertSame($to->value, $job['status']);
+        $this->assertSame($to, $job->status);
     }
 
     /**
@@ -197,12 +197,21 @@ class JobStatusManagerTest extends TestCase
 
         $jobData = $this->manager->getJob($jobId);
         $this->assertNotNull($jobData);
-        $this->assertSame(GenerateProductDescriptionMessageStatus::PROCESSING->value, $jobData['status']);
+        $this->assertSame(GenerateProductDescriptionMessageStatus::PROCESSING, $jobData->status);
     }
 
     public function testItReturnsNullForNonExistentJob(): void
     {
         $this->assertNull($this->manager->getJob('non-existent-job-id'));
+    }
+
+    public function testItReturnsNullWhenCachedDataIsNotAnArray(): void
+    {
+        $item = $this->cache->getItem(JobStatusManager::KEY_PREFIX . 'corrupt-job');
+        $item->set('corrupted-string-data');
+        $this->cache->save($item);
+
+        $this->assertNull($this->manager->getJob('corrupt-job'));
     }
 
     public function testItThrowsValueErrorOnInvalidStatusString(): void
@@ -242,7 +251,7 @@ class JobStatusManagerTest extends TestCase
 
         $job = $manager->getJob('locked-job');
         $this->assertNotNull($job);
-        $this->assertSame(GenerateProductDescriptionMessageStatus::PROCESSING->value, $job['status']);
+        $this->assertSame(GenerateProductDescriptionMessageStatus::PROCESSING, $job->status);
     }
 
     public function testItReleasesLockWhenExceptionThrownInUpdateJob(): void
