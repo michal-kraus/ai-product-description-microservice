@@ -37,6 +37,7 @@ flowchart TD
         Limiter["Rate Limiter (30 req/min API, 120 req/min Status)"]
         Controller["ProductDescriptionController"]
         Command["GenerateProductDescriptionCommand"]
+        Dispatcher["ProductDescriptionJobDispatcher"]
         Generator["ProductDescriptionGenerator"]
         JobManager["JobStatusManager"]
         JobListener["JobFailedListener (Messenger)"]
@@ -56,6 +57,7 @@ flowchart TD
 
     subgraph Infra ["Infrastructure & External APIs"]
         RedisCache[("Redis (Cache & Rate Limiter)")]
+        LockStore[("Symfony Lock (Distributed Mutex)")]
         Queues[("Message Broker (Redis Queue / RabbitMQ AMQP)")]
         OllamaSrv["Ollama Server (Local LLM)"]
         GeminiAPI["Google Gemini API (Cloud LLM)"]
@@ -67,8 +69,10 @@ flowchart TD
     Controller -- "Sync Execution" --> Generator
     Command -- "Sync Execution" --> Generator
 
-    Controller -- "Async Dispatch (UUIDv7)" --> Bus
-    Command -- "Async Dispatch (UUIDv7)" --> Bus
+    Controller -- "Dispatch Async Job" --> Dispatcher
+    Command -- "Dispatch Async Job" --> Dispatcher
+    Dispatcher -- "Enqueues (UUIDv7)" --> Bus
+    Dispatcher --> JobManager
 
     Bus --> Queues --> Handler
     Handler -- "Update Status (Processing / Completed)" --> JobManager
@@ -86,16 +90,18 @@ flowchart TD
     Gemini <--> GeminiAPI
 
     Controller -. "Poll Status" .-> JobManager
-    JobManager <--> RedisCache
+    JobManager <-->|"State Persistence"| RedisCache
+    JobManager <-->|"Atomic Locking"| LockStore
 ```
 
 ### Key Design Patterns & Engineering Highlights
 
-- **Strategy Pattern** — `AIClientInterface` with hot-swappable providers (`OllamaClient`, `GeminiClient`).
+- **Strategy & DIP Patterns** — `AIClientInterface` with hot-swappable providers (`OllamaClient`, `GeminiClient`), `JobStatusManagerInterface` for decoupled persistence, and `PromptBuilderInterface` for customizable prompt strategies.
 - **Factory Pattern** — `AIClientFactory` dynamically resolves provider based on `AI_PROVIDER` environment variable.
-- **DTOs (Data Transfer Objects)** — Immutable `readonly` Value Objects (`DescriptionRequest`, `AIResponse`).
-- **Builder Pattern** — `PromptBuilder` for customizable, decoupled prompt templates.
-- **Sliding Window Rate Limiter** — Sliding window algorithm for both generation (30 req/min) and status polling (120 req/min) with isolated cache storage.
+- **DTOs & API Contracts** — Immutable `readonly` Value Objects (`DescriptionRequest`, `AIResponse`) and dedicated response DTOs (`SyncDescriptionResponse`, `AsyncJobCreatedResponse`, `AsyncJobStatusResponse`, `ApiErrorResponse`) mapped strictly to OpenAPI 3.1 contracts.
+- **Distributed Concurrency & Locking** — Symfony Lock integration with `LockFactory` enforcing guaranteed atomic read-modify-write state transitions in `JobStatusManager` across multiple concurrent workers.
+- **Unified Async Job Dispatcher** — `ProductDescriptionJobDispatcher` encapsulating UUIDv7 generation, job state initialization, bus dispatching, and failure rollback for both REST API and CLI.
+- **Sliding Window Rate Limiter** — Sliding window algorithm for both generation (30 req/min) and status polling (120 req/min) with isolated cache storage and unified controller consumption.
 - **Transport-Agnostic Async Queues** — Non-blocking message dispatch via Symfony Messenger with hot-swappable queue drivers: **Redis** or **RabbitMQ (AMQP)** with automatic retry strategy and dead-letter handling.
 - **Multi-factor Versioned Caching** — Fast, collision-resistant xxh128 Redis caching of generated descriptions based on cache version, provider, model, prompt, and input features (TTL: 600s).
 - **Request Correlation & Observability** — End-to-end distributed tracing via `X-Request-ID` header (UUID v7) propagated across HTTP requests, responses, async Messenger envelopes, and structured log contexts.
@@ -272,15 +278,15 @@ make worker
 
 ## 🧪 Testing & Code Quality
 
-The project includes **104 automated tests** (Unit + Functional) with **100% code coverage**:
+The project includes **118 automated tests** (Unit + Functional) with **100% code coverage**:
 
 ```bash
 make check
 ```
 
 Results:
-* **PHPStan Level 8**: `[OK] No errors` (42 files analyzed)
-* **PHPUnit 13**: `OK (104 tests, 369 assertions)`
+* **PHPStan Level 8**: `[OK] No errors` (53 files analyzed)
+* **PHPUnit 13**: `OK (118 tests, 421 assertions)`
 * **Code Coverage**: `100.00% lines covered`
 
 ---
@@ -288,8 +294,8 @@ Results:
 ## ⚙️ Tech Stack
 
 - **PHP 8.5** — `declare(strict_types=1)`, `readonly` classes, enums, match expressions, constructor promotion
-- **Symfony 8.1** — Framework, Messenger, RateLimiter, Cache, HttpClient, Console, Serializer
-- **RabbitMQ & Redis** — transport-agnostic async message queuing via AMQP/Redis, description caching, rate limiter storage
+- **Symfony 8.1** — Framework, Messenger, RateLimiter, Cache, HttpClient, Console, Serializer, Lock
+- **RabbitMQ & Redis** — transport-agnostic async message queuing via AMQP/Redis, description caching, rate limiter storage, distributed mutex locking
 - **Ollama** — self-hosted local AI inference engine
 - **Google Gemini API** — cloud LLM provider
 - **PHPStan (Level 8)** — maximum strictness static type checking
@@ -314,7 +320,8 @@ src/
 │   ├── Factory/
 │   │   └── AIClientFactory.php           # AI Provider factory
 │   └── Prompt/
-│       └── PromptBuilder.php             # Template-based prompt builder
+│       ├── PromptBuilder.php             # Template-based prompt builder
+│       └── PromptBuilderInterface.php    # Prompt strategy contract
 ├── Command/
 │   └── GenerateProductDescriptionCommand.php # Symfony CLI console command
 ├── Controller/
@@ -322,19 +329,28 @@ src/
 │   ├── HealthCheckController.php         # /health and /ready monitoring endpoints
 │   └── ProductDescriptionController.php  # REST API endpoints (sync & async)
 ├── DTO/
-│   └── GenerateProductDescriptionRequest.php # Validated HTTP input request DTO
+│   ├── GenerateProductDescriptionRequest.php # Validated HTTP input request DTO
+│   └── Response/
+│       ├── ApiErrorResponse.php          # Standardized API error response DTO
+│       ├── AsyncJobCreatedResponse.php   # Async job acceptance response DTO
+│       ├── AsyncJobStatusResponse.php    # Polled job status response DTO
+│       └── SyncDescriptionResponse.php   # Synchronous generation response DTO
 ├── Enum/
 │   └── GenerateProductDescriptionMessageStatus.php # State machine enum
 ├── EventListener/
 │   ├── JobFailedListener.php             # Messenger permanent failure listener
 │   └── RequestIdListener.php             # Request correlation ID (X-Request-ID) listener
 ├── Exception/
-│   └── ProductDescriptionGenerationException.php   # Domain-specific exception
+│   ├── JobDispatchException.php                  # Failure during async job queue dispatch
+│   └── ProductDescriptionGenerationException.php # Domain-specific AI generation exception
 ├── Message/
 │   └── GenerateProductDescriptionMessage.php       # Async message DTO
 ├── MessageHandler/
 │   └── GenerateProductDescriptionMessageHandler.php # Async queue consumer
 └── Service/
-    ├── JobStatusManager.php              # Redis-backed job state manager
-    └── ProductDescriptionGenerator.php    # Core description orchestration with cache
+    ├── JobStatusManager.php                      # Concurrency-safe job state manager (Symfony Lock)
+    ├── JobStatusManagerInterface.php             # Job lifecycle persistence contract
+    ├── ProductDescriptionGenerator.php           # Core description orchestration with cache
+    ├── ProductDescriptionJobDispatcher.php        # Reusable async job orchestration service
+    └── ProductDescriptionJobDispatcherInterface.php # Async dispatching contract
 ```

@@ -37,6 +37,7 @@ flowchart TD
         Limiter["Rate Limiter (30 req/min API, 120 req/min Status)"]
         Controller["ProductDescriptionController"]
         Command["GenerateProductDescriptionCommand"]
+        Dispatcher["ProductDescriptionJobDispatcher"]
         Generator["ProductDescriptionGenerator"]
         JobManager["JobStatusManager"]
         JobListener["JobFailedListener (Messenger)"]
@@ -56,6 +57,7 @@ flowchart TD
 
     subgraph Infra ["Infrastruktura & Zewnętrzne API"]
         RedisCache[("Redis (Cache & Rate Limiter)")]
+        LockStore[("Symfony Lock (Rozproszony Mutex)")]
         Queues[("Message Broker (Kolejka Redis / RabbitMQ AMQP)")]
         OllamaSrv["Ollama Server (Local LLM)"]
         GeminiAPI["Google Gemini API (Cloud LLM)"]
@@ -67,8 +69,10 @@ flowchart TD
     Controller -- "Tryb synchroniczny" --> Generator
     Command -- "Tryb synchroniczny" --> Generator
 
-    Controller -- "Zlecenie asynchroniczne (UUIDv7)" --> Bus
-    Command -- "Zlecenie asynchroniczne (UUIDv7)" --> Bus
+    Controller -- "Zlecenie asynchroniczne" --> Dispatcher
+    Command -- "Zlecenie asynchroniczne" --> Dispatcher
+    Dispatcher -- "Kolejkuje (UUIDv7)" --> Bus
+    Dispatcher --> JobManager
 
     Bus --> Queues --> Handler
     Handler -- "Aktualizacja statusu (Processing / Completed)" --> JobManager
@@ -86,19 +90,21 @@ flowchart TD
     Gemini <--> GeminiAPI
 
     Controller -. "Odpytanie o status" .-> JobManager
-    JobManager <--> RedisCache
+    JobManager <-->|"Persystencja stanu"| RedisCache
+    JobManager <-->|"Atomowa blokada"| LockStore
 ```
 
 ### Kluczowe wzorce i mechanizmy
 
-- **Strategy Pattern** — `AIClientInterface` z wymiennymi implementacjami (`OllamaClient`, `GeminiClient`)
-- **Factory Pattern** — `AIClientFactory` tworzy klienta na podstawie zmiennej środowiskowej `AI_PROVIDER`
-- **DTO (Data Transfer Objects)** — `DescriptionRequest`, `AIResponse` jako czyste, niemutowalne (readonly) Value Objects
-- **Builder Pattern** — `PromptBuilder` z dynamicznie konfigurowalnym szablonem promptu
-- **Sliding Window Rate Limiter** — ochrona API generowania (30 req/min) i odpytywania o status (120 req/min) z dedykowaną pulą cache
-- **Transport-Agnostic Async Queues** — asynchroniczne kolejki wiadomości przez Symfony Messenger z możliwością wyboru brokera: **Redis** lub **RabbitMQ (AMQP)** wraz ze strategią ponowień (retry strategy) oraz dead-letter handling
-- **Wieloskładnikowy Cache z Wersjonowaniem** — szybkie, odporne na kolizje hashowanie xxh128 w Redis dla wygenerowanych opisów w oparciu o wersję cache, providera, model, prompt i cechy (TTL: 600s)
-- **Korelacja żądań i obserwowalność (Observability)** — śledzenie żądań end-to-end za pomocą nagłówka `X-Request-ID` (UUID v7), propagowanego w nagłówkach HTTP, kopertach asynchronicznych wiadomości Messengera oraz w logach
+- **Strategy & DIP Patterns** — `AIClientInterface` z wymiennymi implementacjami (`OllamaClient`, `GeminiClient`), `JobStatusManagerInterface` odsprzęgający magazyn stanu oraz `PromptBuilderInterface` umożliwiający elastyczną zmianę szablonów i strategii promptowania.
+- **Factory Pattern** — `AIClientFactory` tworzy klienta na podstawie zmiennej środowiskowej `AI_PROVIDER`.
+- **DTO i Kontrakty API** — `DescriptionRequest`, `AIResponse` jako czyste, niemutowalne obiekty domenowe (readonly Value Objects) oraz dedykowane DTO odpowiedzi API (`SyncDescriptionResponse`, `AsyncJobCreatedResponse`, `AsyncJobStatusResponse`, `ApiErrorResponse`) zgodne ze specyfikacją OpenAPI 3.1.
+- **Współbieżność i Rozproszone Blokady (Locking)** — integracja `Symfony Lock` z `LockFactory` gwarantująca bezwzględną atomowość operacji read-modify-write w `JobStatusManager` w środowisku z wieloma workerami.
+- **Ujednolicona Orkiestracja Zadań (Job Dispatcher)** — `ProductDescriptionJobDispatcher` hermetyzuje generowanie UUIDv7, inicjalizację stanu w cache, dispatch do Messengera oraz obsługę awarii dla API i CLI.
+- **Sliding Window Rate Limiter** — ochrona API generowania (30 req/min) i odpytywania o status (120 req/min) z dedykowaną pulą cache i sparametryzowaną weryfikacją w kontrolerze.
+- **Transport-Agnostic Async Queues** — asynchroniczne kolejki wiadomości przez Symfony Messenger z możliwością wyboru brokera: **Redis** lub **RabbitMQ (AMQP)** wraz ze strategią ponowień (retry strategy) oraz dead-letter handling.
+- **Wieloskładnikowy Cache z Wersjonowaniem** — szybkie, odporne na kolizje hashowanie xxh128 w Redis dla wygenerowanych opisów w oparciu o wersję cache, providera, model, prompt i cechy (TTL: 600s).
+- **Korelacja żądań i obserwowalność (Observability)** — śledzenie żądań end-to-end za pomocą nagłówka `X-Request-ID` (UUID v7), propagowanego w nagłówkach HTTP, kopertach asynchronicznych wiadomości Messengera oraz w logach.
 
 ---
 
@@ -272,15 +278,15 @@ make worker
 
 ## 🧪 Testy i jakość kodu
 
-Projekt posiada **104 testy automatyczne** (Unit + Functional) ze **100% pokryciem kodu**:
+Projekt posiada **118 testów automatycznych** (Unit + Functional) ze **100% pokryciem kodu**:
 
 ```bash
 make check
 ```
 
 Wynik:
-* **PHPStan Level 8**: `[OK] No errors` (42 pliki)
-* **PHPUnit 13**: `OK (104 tests, 369 assertions)`
+* **PHPStan Level 8**: `[OK] No errors` (53 pliki)
+* **PHPUnit 13**: `OK (118 tests, 421 assertions)`
 * **Code Coverage**: `100.00% lines covered`
 
 ---
@@ -288,8 +294,8 @@ Wynik:
 ## ⚙️ Stos technologiczny
 
 - **PHP 8.5** — `declare(strict_types=1)`, `readonly` classes, enums, match expressions, constructor promotion
-- **Symfony 8.1** — Framework, Messenger, RateLimiter, Cache, HttpClient, Console, Serializer
-- **RabbitMQ & Redis** — transport-agnostic async message queuing przez AMQP/Redis, cache opisów produktów, rate limiter storage
+- **Symfony 8.1** — Framework, Messenger, RateLimiter, Cache, HttpClient, Console, Serializer, Lock
+- **RabbitMQ & Redis** — transport-agnostic async message queuing przez AMQP/Redis, cache opisów produktów, rate limiter storage, rozproszony mutex
 - **Ollama** — lokalny serwer AI (self-hosted LLM)
 - **Google Gemini API** — chmurowy dostawca modeli LLM
 - **PHPStan (Level 8)** — maksymalny poziom statycznej analizy typów
@@ -314,7 +320,8 @@ src/
 │   ├── Factory/
 │   │   └── AIClientFactory.php           # Fabryka instancjonująca providera
 │   └── Prompt/
-│       └── PromptBuilder.php             # Budowniczy promptów z szablonów
+│       ├── PromptBuilder.php             # Budowniczy promptów z szablonów
+│       └── PromptBuilderInterface.php    # Kontrakt budowy promptów
 ├── Command/
 │   └── GenerateProductDescriptionCommand.php # Konsolowa komenda CLI
 ├── Controller/
@@ -322,19 +329,28 @@ src/
 │   ├── HealthCheckController.php         # Endpointy monitoringu /health i /ready
 │   └── ProductDescriptionController.php  # REST API endpointy (sync & async)
 ├── DTO/
-│   └── GenerateProductDescriptionRequest.php # Walidowany obiekt DTO żądania HTTP
+│   ├── GenerateProductDescriptionRequest.php # Walidowany obiekt DTO żądania HTTP
+│   └── Response/
+│       ├── ApiErrorResponse.php          # Ustandaryzowane DTO odpowiedzi z błędem
+│       ├── AsyncJobCreatedResponse.php   # DTO potwierdzenia przyjęcia zlecenia async
+│       ├── AsyncJobStatusResponse.php    # DTO odpytywania o status zadania async
+│       └── SyncDescriptionResponse.php   # DTO synchronicznej odpowiedzi z opisem
 ├── Enum/
 │   └── GenerateProductDescriptionMessageStatus.php # Maszyna stanów zadania
 ├── EventListener/
 │   ├── JobFailedListener.php             # Listener trwałych błędów workera Messengera
 │   └── RequestIdListener.php             # Listener korelacji żądań HTTP (X-Request-ID)
 ├── Exception/
-│   └── ProductDescriptionGenerationException.php   # Dedykowany wyjątek domenowy
+│   ├── JobDispatchException.php                  # Wyjątek błędu kolejkowania zadania
+│   └── ProductDescriptionGenerationException.php # Dedykowany wyjątek domenowy generowania AI
 ├── Message/
 │   └── GenerateProductDescriptionMessage.php       # DTO wiadomości asynchronicznej
 ├── MessageHandler/
 │   └── GenerateProductDescriptionMessageHandler.php # Konsument wiadomości kolejki
 └── Service/
-    ├── JobStatusManager.php              # Zarządzanie stanem zadań w Redis
-    └── ProductDescriptionGenerator.php    # Główna orkiestracja generowania z cache
+    ├── JobStatusManager.php                      # Współbieżny menedżer stanu zadań (Symfony Lock)
+    ├── JobStatusManagerInterface.php             # Kontrakt zarządzania cyklem życia zadań
+    ├── ProductDescriptionGenerator.php           # Główna orkiestracja generowania z cache
+    ├── ProductDescriptionJobDispatcher.php        # Reużywalny serwis orkiestracji asynchronicznej
+    └── ProductDescriptionJobDispatcherInterface.php # Kontrakt dispatchera zadań
 ```
