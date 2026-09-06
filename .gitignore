@@ -34,6 +34,7 @@
 # Parameters
 /app/config/parameters.yml
 /app/config/parameters.ini
+/config/reference.php
 
 # Managed by Composer
 /app/bootstrap.php.cache
