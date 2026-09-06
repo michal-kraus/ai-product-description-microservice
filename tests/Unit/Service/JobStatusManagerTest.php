@@ -214,4 +214,57 @@ class JobStatusManagerTest extends TestCase
             'status' => 'non_existent_status',
         ]);
     }
+
+    public function testItAcquiresAndReleasesLockDuringUpdateJob(): void
+    {
+        $lock = $this->createMock(\Symfony\Component\Lock\SharedLockInterface::class);
+        $lock->expects($this->once())
+            ->method('acquire')
+            ->with(true)
+            ->willReturn(true);
+        $lock->expects($this->once())
+            ->method('release');
+
+        $lockFactory = $this->createMock(\Symfony\Component\Lock\LockFactory::class);
+        $lockFactory->expects($this->once())
+            ->method('createLock')
+            ->with(JobStatusManager::KEY_PREFIX . 'locked-job', JobStatusManager::LOCK_TTL)
+            ->willReturn($lock);
+
+        $manager = new JobStatusManager($this->cache, 3600, $lockFactory);
+        $manager->createJob('locked-job');
+
+        $manager->updateJob('locked-job', [
+            'status' => GenerateProductDescriptionMessageStatus::PROCESSING->value,
+        ]);
+
+        $job = $manager->getJob('locked-job');
+        $this->assertNotNull($job);
+        $this->assertSame(GenerateProductDescriptionMessageStatus::PROCESSING->value, $job['status']);
+    }
+
+    public function testItReleasesLockWhenExceptionThrownInUpdateJob(): void
+    {
+        $lock = $this->createMock(\Symfony\Component\Lock\SharedLockInterface::class);
+        $lock->expects($this->once())
+            ->method('acquire')
+            ->with(true)
+            ->willReturn(true);
+        $lock->expects($this->once())
+            ->method('release');
+
+        $lockFactory = $this->createMock(\Symfony\Component\Lock\LockFactory::class);
+        $lockFactory->expects($this->once())
+            ->method('createLock')
+            ->willReturn($lock);
+
+        $manager = new JobStatusManager($this->cache, 3600, $lockFactory);
+        $manager->createJob('locked-job-fail');
+
+        $this->expectException(DomainException::class);
+
+        $manager->updateJob('locked-job-fail', [
+            'status' => GenerateProductDescriptionMessageStatus::COMPLETED->value,
+        ]);
+    }
 }

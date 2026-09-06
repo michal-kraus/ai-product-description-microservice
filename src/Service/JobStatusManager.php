@@ -9,25 +9,18 @@ use DateTimeImmutable;
 use DateTimeInterface;
 use DomainException;
 use Psr\Cache\CacheItemPoolInterface;
+use Symfony\Component\Lock\LockFactory;
 
-/**
- * Manages the lifecycle and state transitions of asynchronous description jobs.
- *
- * Concurrency Note:
- * State transitions are guarded via domain rules in GenerateProductDescriptionMessageStatus.
- * Persistence uses a read-modify-write pattern backed by PSR-6 cache (e.g. Redis).
- * For high-concurrency multi-worker deployments where race conditions during
- * duplicate deliveries could occur, a transactional store or Redis Lua script execution
- * can be integrated.
- */
-class JobStatusManager
+class JobStatusManager implements JobStatusManagerInterface
 {
     public const KEY_PREFIX = 'job_';
     public const DEFAULT_TTL = 3600;
+    public const LOCK_TTL = 15.0;
 
     public function __construct(
         private CacheItemPoolInterface $messengerJobsCache,
         private int $ttl = self::DEFAULT_TTL,
+        private ?LockFactory $lockFactory = null,
     ) {}
 
     public function createJob(string $jobId): void
@@ -46,36 +39,43 @@ class JobStatusManager
      */
     public function updateJob(string $jobId, array $data): void
     {
-        $item = $this->messengerJobsCache->getItem(self::KEY_PREFIX . $jobId);
-        $existing = $item->isHit() ? (array) $item->get() : [];
+        $lock = $this->lockFactory?->createLock(self::KEY_PREFIX . $jobId, self::LOCK_TTL);
+        $lock?->acquire(blocking: true);
 
-        if (isset($data['status'])) {
-            $newStatus = $data['status'] instanceof GenerateProductDescriptionMessageStatus
-                ? $data['status']
-                : GenerateProductDescriptionMessageStatus::from((string) $data['status']);
+        try {
+            $item = $this->messengerJobsCache->getItem(self::KEY_PREFIX . $jobId);
+            $existing = $item->isHit() ? (array) $item->get() : [];
 
-            $data['status'] = $newStatus->value;
+            if (isset($data['status'])) {
+                $newStatus = $data['status'] instanceof GenerateProductDescriptionMessageStatus
+                    ? $data['status']
+                    : GenerateProductDescriptionMessageStatus::from((string) $data['status']);
 
-            if (isset($existing['status']) && \is_string($existing['status'])) {
-                $currentStatus = GenerateProductDescriptionMessageStatus::tryFrom($existing['status']);
+                $data['status'] = $newStatus->value;
 
-                if ($currentStatus !== null && !$currentStatus->canTransitionTo($newStatus)) {
-                    throw new DomainException(\sprintf(
-                        'Invalid job status transition from "%s" to "%s".',
-                        $currentStatus->value,
-                        $newStatus->value,
-                    ));
+                if (isset($existing['status']) && \is_string($existing['status'])) {
+                    $currentStatus = GenerateProductDescriptionMessageStatus::tryFrom($existing['status']);
+
+                    if ($currentStatus !== null && !$currentStatus->canTransitionTo($newStatus)) {
+                        throw new DomainException(\sprintf(
+                            'Invalid job status transition from "%s" to "%s".',
+                            $currentStatus->value,
+                            $newStatus->value,
+                        ));
+                    }
                 }
             }
+
+            $merged = array_merge($existing, $data, [
+                'updated_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
+            ]);
+
+            $item->set($merged);
+            $item->expiresAfter($this->ttl);
+            $this->messengerJobsCache->save($item);
+        } finally {
+            $lock?->release();
         }
-
-        $merged = array_merge($existing, $data, [
-            'updated_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
-        ]);
-
-        $item->set($merged);
-        $item->expiresAfter($this->ttl);
-        $this->messengerJobsCache->save($item);
     }
 
     /**
