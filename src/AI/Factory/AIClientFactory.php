@@ -9,7 +9,7 @@ use App\AI\Client\GeminiClient;
 use App\AI\Client\OllamaClient;
 use InvalidArgumentException;
 
-class AIClientFactory
+final readonly class AIClientFactory
 {
     public function __construct(
         private OllamaClient $ollamaClient,

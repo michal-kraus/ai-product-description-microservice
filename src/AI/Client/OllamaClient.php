@@ -9,7 +9,7 @@ use App\AI\DTO\DescriptionRequest;
 use RuntimeException;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
-class OllamaClient implements AIClientInterface
+final readonly class OllamaClient implements AIClientInterface
 {
     private const GENERATE_ENDPOINT = '/api/generate';
     private const VERSION_ENDPOINT = '/api/version';

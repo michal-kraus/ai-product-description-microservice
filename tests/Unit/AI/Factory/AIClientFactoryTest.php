@@ -9,6 +9,7 @@ use App\AI\Client\OllamaClient;
 use App\AI\Factory\AIClientFactory;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 class AIClientFactoryTest extends TestCase
 {
@@ -17,8 +18,9 @@ class AIClientFactoryTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->ollamaClient = $this->createStub(OllamaClient::class);
-        $this->geminiClient = $this->createStub(GeminiClient::class);
+        $httpClient = $this->createStub(HttpClientInterface::class);
+        $this->ollamaClient = new OllamaClient($httpClient);
+        $this->geminiClient = new GeminiClient($httpClient, 'dummy-api-key');
     }
 
     public function testItReturnsOllamaClientWhenProviderIsOllama(): void

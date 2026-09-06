@@ -12,7 +12,7 @@ use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Uid\Uuid;
 use Throwable;
 
-class ProductDescriptionJobDispatcher implements ProductDescriptionJobDispatcherInterface
+final readonly class ProductDescriptionJobDispatcher implements ProductDescriptionJobDispatcherInterface
 {
     public function __construct(
         private MessageBusInterface $messageBus,

@@ -10,7 +10,7 @@ use App\Exception\ProductDescriptionGenerationException;
 use App\Message\GenerateProductDescriptionMessage;
 use App\MessageHandler\GenerateProductDescriptionMessageHandler;
 use App\Service\JobStatusManager;
-use App\Service\ProductDescriptionGenerator;
+use App\Service\ProductDescriptionGeneratorInterface;
 use App\Tests\Fixtures\ProductDataProvider;
 use PHPUnit\Framework\Attributes\DataProviderExternal;
 use PHPUnit\Framework\TestCase;
@@ -28,11 +28,15 @@ class GenerateProductDescriptionHandlerTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->jobStatusManager = new JobStatusManager(new ArrayAdapter(), new LockFactory(new InMemoryStore()));
+        $this->jobStatusManager = new JobStatusManager(
+            new ArrayAdapter(),
+            new LockFactory(new InMemoryStore()),
+            3600,
+        );
     }
 
     #[DataProviderExternal(ProductDataProvider::class, 'providePayloads')]
-    public function testItProcessesMessageFromPendingToCompleted(
+    public function testItGeneratesDescriptionAndUpdatesJobStatus(
         string $expectedName,
         string $expectedFeatures,
         string $mockedOutput,
@@ -43,9 +47,9 @@ class GenerateProductDescriptionHandlerTest extends TestCase
         $this->jobStatusManager->createJob($jobId);
         $initialJob = $this->jobStatusManager->getJob($jobId);
         $this->assertNotNull($initialJob);
-        $this->assertSame(GenerateProductDescriptionMessageStatus::PENDING->value, $initialJob['status']);
+        $this->assertSame(GenerateProductDescriptionMessageStatus::PENDING, $initialJob->status);
 
-        $generator = $this->createMock(ProductDescriptionGenerator::class);
+        $generator = $this->createMock(ProductDescriptionGeneratorInterface::class);
         $generator->expects($this->once())
             ->method('generate')
             ->with($expectedName, $expectedFeatures, $requestId)
@@ -58,8 +62,8 @@ class GenerateProductDescriptionHandlerTest extends TestCase
 
         $savedData = $this->jobStatusManager->getJob($jobId);
         $this->assertNotNull($savedData);
-        $this->assertSame(GenerateProductDescriptionMessageStatus::COMPLETED->value, $savedData['status']);
-        $this->assertSame($mockedOutput, $savedData['description']);
+        $this->assertSame(GenerateProductDescriptionMessageStatus::COMPLETED, $savedData->status);
+        $this->assertSame($mockedOutput, $savedData->description);
     }
 
     public function testItLeavesJobStatusAsProcessingOnGeneratorExceptionToAllowRetry(): void
@@ -67,7 +71,7 @@ class GenerateProductDescriptionHandlerTest extends TestCase
         $jobId = 'job-fail';
         $this->jobStatusManager->createJob($jobId);
 
-        $generator = $this->createStub(ProductDescriptionGenerator::class);
+        $generator = $this->createStub(ProductDescriptionGeneratorInterface::class);
         $generator->method('generate')
             ->willThrowException(new ProductDescriptionGenerationException('AI error'));
 
@@ -88,7 +92,7 @@ class GenerateProductDescriptionHandlerTest extends TestCase
 
         $jobData = $this->jobStatusManager->getJob($jobId);
         $this->assertNotNull($jobData);
-        $this->assertSame(GenerateProductDescriptionMessageStatus::PROCESSING->value, $jobData['status']);
+        $this->assertSame(GenerateProductDescriptionMessageStatus::PROCESSING, $jobData->status);
     }
 
     public function testFullLifecycleFromPendingToRetryAndPermanentFailure(): void
@@ -96,7 +100,7 @@ class GenerateProductDescriptionHandlerTest extends TestCase
         $jobId = 'job-lifecycle';
         $this->jobStatusManager->createJob($jobId);
 
-        $generator = $this->createStub(ProductDescriptionGenerator::class);
+        $generator = $this->createStub(ProductDescriptionGeneratorInterface::class);
         $generator->method('generate')
             ->willThrowException(new ProductDescriptionGenerationException('AI connection timed out'));
 
@@ -114,8 +118,8 @@ class GenerateProductDescriptionHandlerTest extends TestCase
         $jobAttempt1 = $this->jobStatusManager->getJob($jobId);
         $this->assertNotNull($jobAttempt1);
         $this->assertSame(
-            GenerateProductDescriptionMessageStatus::PROCESSING->value,
-            $jobAttempt1['status'],
+            GenerateProductDescriptionMessageStatus::PROCESSING,
+            $jobAttempt1->status,
         );
 
         $envelope = new Envelope($message);
@@ -128,8 +132,8 @@ class GenerateProductDescriptionHandlerTest extends TestCase
         $jobRetry = $this->jobStatusManager->getJob($jobId);
         $this->assertNotNull($jobRetry);
         $this->assertSame(
-            GenerateProductDescriptionMessageStatus::PROCESSING->value,
-            $jobRetry['status'],
+            GenerateProductDescriptionMessageStatus::PROCESSING,
+            $jobRetry->status,
         );
 
         $terminalEvent = new WorkerMessageFailedEvent($envelope, 'async', new RuntimeException('AI connection timed out'));
@@ -139,11 +143,11 @@ class GenerateProductDescriptionHandlerTest extends TestCase
 
         $finalJob = $this->jobStatusManager->getJob($jobId);
         $this->assertNotNull($finalJob);
-        $this->assertSame(GenerateProductDescriptionMessageStatus::FAILED->value, $finalJob['status']);
-        $this->assertSame('Job execution failed after all retry attempts.', $finalJob['error']);
+        $this->assertSame(GenerateProductDescriptionMessageStatus::FAILED, $finalJob->status);
+        $this->assertSame('Job execution failed after all retry attempts.', $finalJob->error);
     }
 
-    private function createHandler(ProductDescriptionGenerator $generator): GenerateProductDescriptionMessageHandler
+    private function createHandler(ProductDescriptionGeneratorInterface $generator): GenerateProductDescriptionMessageHandler
     {
         return new GenerateProductDescriptionMessageHandler($generator, new NullLogger(), $this->jobStatusManager);
     }

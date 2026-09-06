@@ -13,7 +13,7 @@ use App\Enum\GenerateProductDescriptionMessageStatus;
 use App\EventListener\RequestIdListener;
 use App\Exception\JobDispatchException;
 use App\Service\JobStatusManagerInterface;
-use App\Service\ProductDescriptionGenerator;
+use App\Service\ProductDescriptionGeneratorInterface;
 use App\Service\ProductDescriptionJobDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -41,7 +41,7 @@ final class ProductDescriptionController extends AbstractController
         Request $request,
         #[MapRequestPayload(validationFailedStatusCode: Response::HTTP_BAD_REQUEST)]
         GenerateProductDescriptionRequest $productDescriptionRequest,
-        ProductDescriptionGenerator $generator,
+        ProductDescriptionGeneratorInterface $generator,
     ): JsonResponse {
         if ($rateLimitResponse = $this->checkRateLimit($request)) {
             return $rateLimitResponse;

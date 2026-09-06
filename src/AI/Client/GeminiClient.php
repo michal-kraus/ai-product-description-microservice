@@ -9,7 +9,7 @@ use App\AI\DTO\DescriptionRequest;
 use RuntimeException;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
-class GeminiClient implements AIClientInterface
+final readonly class GeminiClient implements AIClientInterface
 {
     private const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions';
     private const API_REVISION = '2026-05-20';

@@ -14,7 +14,7 @@ use Symfony\Contracts\Cache\CacheInterface;
 use Symfony\Contracts\Cache\ItemInterface;
 use Throwable;
 
-class ProductDescriptionGenerator
+final readonly class ProductDescriptionGenerator implements ProductDescriptionGeneratorInterface
 {
     public const CACHE_KEY_PREFIX = 'product_description_';
     public const CACHE_VERSION = 'v1';
