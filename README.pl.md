@@ -6,7 +6,7 @@
 [![PHP](https://img.shields.io/badge/PHP-8.5-777BB4?logo=php&logoColor=white)](https://www.php.net/)
 [![Symfony](https://img.shields.io/badge/Symfony-8.1-000000?logo=symfony&logoColor=white)](https://symfony.com/)
 [![PHPStan](https://img.shields.io/badge/PHPStan-Level%208-brightgreen?logo=phpstan)](https://phpstan.org/)
-[![Coverage](https://img.shields.io/badge/Coverage-99.6%25-brightgreen?logo=codecov)](https://github.com/michal-kraus/ai-product-description-microservice)
+[![Coverage](https://img.shields.io/badge/Coverage-100%25-brightgreen?logo=codecov)](https://github.com/michal-kraus/ai-product-description-microservice)
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapi-initiative&logoColor=white)](openapi.yaml)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -268,16 +268,16 @@ make worker
 
 ## 🧪 Testy i jakość kodu
 
-Projekt posiada **62 testy automatyczne** (Unit + Functional) z **99.6% pokryciem kodu**:
+Projekt posiada **104 testy automatyczne** (Unit + Functional) ze **100% pokryciem kodu**:
 
 ```bash
 make check
 ```
 
 Wynik:
-* **PHPStan Level 8**: `[OK] No errors` (37 plików)
-* **PHPUnit 13**: `OK (62 tests, 200 assertions)`
-* **Code Coverage**: `99.63% lines covered`
+* **PHPStan Level 8**: `[OK] No errors` (42 pliki)
+* **PHPUnit 13**: `OK (104 tests, 369 assertions)`
+* **Code Coverage**: `100.00% lines covered`
 
 ---
 
