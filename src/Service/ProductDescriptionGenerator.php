@@ -7,6 +7,7 @@ namespace App\Service;
 use App\AI\Client\AIClientInterface;
 use App\AI\DTO\DescriptionRequest;
 use App\AI\Prompt\PromptBuilder;
+use App\AI\Prompt\PromptBuilderInterface;
 use App\Exception\ProductDescriptionGenerationException;
 use Psr\Log\LoggerInterface;
 use Symfony\Contracts\Cache\CacheInterface;
@@ -23,7 +24,7 @@ class ProductDescriptionGenerator
     public function __construct(
         private AIClientInterface $aiClient,
         private CacheInterface $productDescriptionCache,
-        private PromptBuilder $promptBuilder = new PromptBuilder(),
+        private PromptBuilderInterface $promptBuilder = new PromptBuilder(),
         private int $cacheTtl = self::DEFAULT_CACHE_TTL,
         private ?LoggerInterface $logger = null,
         private string $provider = 'default',

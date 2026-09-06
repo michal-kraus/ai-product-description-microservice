@@ -6,7 +6,7 @@ namespace App\MessageHandler;
 
 use App\Enum\GenerateProductDescriptionMessageStatus;
 use App\Message\GenerateProductDescriptionMessage;
-use App\Service\JobStatusManager;
+use App\Service\JobStatusManagerInterface;
 use App\Service\ProductDescriptionGenerator;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
@@ -18,7 +18,7 @@ final class GenerateProductDescriptionMessageHandler
     public function __construct(
         private readonly ProductDescriptionGenerator $generator,
         private readonly LoggerInterface $logger,
-        private readonly JobStatusManager $jobStatusManager,
+        private readonly JobStatusManagerInterface $jobStatusManager,
     ) {}
 
     public function __invoke(

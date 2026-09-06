@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\AI\Prompt;
 
-class PromptBuilder
+class PromptBuilder implements PromptBuilderInterface
 {
     public const DEFAULT_TEMPLATE = "Jesteś copywriterem e-commerce. Napisz krótki i atrakcyjny opis produktu po polsku:\nNazwa: {name}\nCechy: {features}";
 

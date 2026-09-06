@@ -6,7 +6,7 @@ namespace App\EventListener;
 
 use App\Enum\GenerateProductDescriptionMessageStatus;
 use App\Message\GenerateProductDescriptionMessage;
-use App\Service\JobStatusManager;
+use App\Service\JobStatusManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
@@ -15,7 +15,7 @@ use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
 final readonly class JobFailedListener
 {
     public function __construct(
-        private JobStatusManager $jobStatusManager,
+        private JobStatusManagerInterface $jobStatusManager,
         private LoggerInterface $logger,
     ) {}
 
