@@ -67,6 +67,7 @@ final class HealthCheckControllerTest extends WebTestCase
         $aiClient->method('ping')->willReturn(true);
 
         $controller = new HealthCheckController($failingCache, $aiClient, 'ollama', new NullLogger());
+        $controller->setContainer(static::getContainer());
         $response = $controller->ready();
 
         self::assertSame(Response::HTTP_SERVICE_UNAVAILABLE, $response->getStatusCode());
@@ -89,6 +90,7 @@ final class HealthCheckControllerTest extends WebTestCase
             ->willThrowException(new RuntimeException('Connection timeout'));
 
         $controller = new HealthCheckController($cache, $failingAiClient, 'ollama', new NullLogger());
+        $controller->setContainer(static::getContainer());
         $response = $controller->ready();
 
         self::assertSame(Response::HTTP_SERVICE_UNAVAILABLE, $response->getStatusCode());

@@ -7,12 +7,13 @@ namespace App\Controller;
 use App\AI\Client\AIClientInterface;
 use Psr\Cache\CacheItemPoolInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Throwable;
 
-final class HealthCheckController
+final class HealthCheckController extends AbstractController
 {
     public function __construct(
         private readonly CacheItemPoolInterface $messengerJobsCache,
@@ -24,7 +25,7 @@ final class HealthCheckController
     #[Route('/health', name: 'app_health', methods: ['GET'])]
     public function health(): JsonResponse
     {
-        return new JsonResponse([
+        return $this->json([
             'status' => 'ok',
         ], Response::HTTP_OK);
     }
@@ -39,7 +40,7 @@ final class HealthCheckController
 
         $healthy = !\in_array(false, array_column($checks, 'healthy'), true);
 
-        return new JsonResponse([
+        return $this->json([
             'status' => $healthy ? 'healthy' : 'degraded',
             'checks' => $checks,
         ], $healthy ? Response::HTTP_OK : Response::HTTP_SERVICE_UNAVAILABLE);
