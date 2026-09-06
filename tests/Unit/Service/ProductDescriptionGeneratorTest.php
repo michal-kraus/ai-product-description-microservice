@@ -117,6 +117,22 @@ class ProductDescriptionGeneratorTest extends TestCase
         $generator->generate('FailProduct', 'Features');
     }
 
+    public function testItTruncatesDescriptionExceedingMaxLength(): void
+    {
+        $hugeOutput = str_repeat('x', ProductDescriptionGenerator::MAX_DESCRIPTION_LENGTH + 500);
+
+        $aiClient = $this->createMock(AIClientInterface::class);
+        $aiClient->method('getModel')->willReturn('test-model');
+        $aiClient->expects($this->once())
+            ->method('generateDescription')
+            ->willReturn(new AIResponse($hugeOutput));
+
+        $generator = $this->createGenerator($aiClient);
+
+        $description = $generator->generate('Product', 'Features');
+        $this->assertSame(ProductDescriptionGenerator::MAX_DESCRIPTION_LENGTH, mb_strlen($description));
+    }
+
     private function createGenerator(AIClientInterface $aiClient, int $ttl = ProductDescriptionGenerator::DEFAULT_CACHE_TTL): ProductDescriptionGenerator
     {
         return new ProductDescriptionGenerator($aiClient, $this->cache, $this->promptBuilder, $ttl);

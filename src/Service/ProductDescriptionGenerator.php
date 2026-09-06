@@ -18,6 +18,7 @@ class ProductDescriptionGenerator
     public const CACHE_KEY_PREFIX = 'product_description_';
     public const CACHE_VERSION = 'v1';
     public const DEFAULT_CACHE_TTL = 600;
+    public const MAX_DESCRIPTION_LENGTH = 10_000;
 
     public function __construct(
         private AIClientInterface $aiClient,
@@ -26,7 +27,6 @@ class ProductDescriptionGenerator
         private int $cacheTtl = self::DEFAULT_CACHE_TTL,
         private ?LoggerInterface $logger = null,
         private string $provider = 'default',
-        private string $model = 'default',
     ) {}
 
     public function generate(string $productName, string $productFeatures): string
@@ -46,7 +46,12 @@ class ProductDescriptionGenerator
                     'product' => $productName,
                 ]);
 
-                return $this->aiClient->generateDescription($descriptionRequest)->description;
+                $rawDescription = $this->aiClient->generateDescription($descriptionRequest)->description;
+                $trimmed = trim($rawDescription);
+
+                return (mb_strlen($trimmed) > self::MAX_DESCRIPTION_LENGTH)
+                    ? mb_substr($trimmed, 0, self::MAX_DESCRIPTION_LENGTH)
+                    : $trimmed;
             });
 
             if ($cacheHit) {
@@ -72,8 +77,7 @@ class ProductDescriptionGenerator
 
     private function buildCacheKey(string $productName, string $productFeatures, string $prompt): string
     {
-        $activeModel = $this->aiClient->getModel();
-        $model = ($activeModel !== '') ? $activeModel : $this->model;
+        $model = $this->aiClient->getModel();
 
         $hash = hash('xxh128', implode('|', [
             self::CACHE_VERSION,
