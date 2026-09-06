@@ -13,6 +13,8 @@ use Psr\Log\NullLogger;
 use RuntimeException;
 use stdClass;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
+use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Lock\Store\InMemoryStore;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
 
@@ -23,7 +25,7 @@ class JobFailedListenerTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->jobStatusManager = new JobStatusManager(new ArrayAdapter());
+        $this->jobStatusManager = new JobStatusManager(new ArrayAdapter(), new LockFactory(new InMemoryStore()));
         $this->listener = new JobFailedListener($this->jobStatusManager, new NullLogger());
     }
 

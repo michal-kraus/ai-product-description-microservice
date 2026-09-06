@@ -19,8 +19,8 @@ class JobStatusManager implements JobStatusManagerInterface
 
     public function __construct(
         private CacheItemPoolInterface $messengerJobsCache,
+        private LockFactory $lockFactory,
         private int $ttl = self::DEFAULT_TTL,
-        private ?LockFactory $lockFactory = null,
     ) {}
 
     public function createJob(string $jobId): void
@@ -39,8 +39,8 @@ class JobStatusManager implements JobStatusManagerInterface
      */
     public function updateJob(string $jobId, array $data): void
     {
-        $lock = $this->lockFactory?->createLock(self::KEY_PREFIX . $jobId, self::LOCK_TTL);
-        $lock?->acquire(blocking: true);
+        $lock = $this->lockFactory->createLock(self::KEY_PREFIX . $jobId, self::LOCK_TTL);
+        $lock->acquire(blocking: true);
 
         try {
             $item = $this->messengerJobsCache->getItem(self::KEY_PREFIX . $jobId);
@@ -74,7 +74,7 @@ class JobStatusManager implements JobStatusManagerInterface
             $item->expiresAfter($this->ttl);
             $this->messengerJobsCache->save($item);
         } finally {
-            $lock?->release();
+            $lock->release();
         }
     }
 

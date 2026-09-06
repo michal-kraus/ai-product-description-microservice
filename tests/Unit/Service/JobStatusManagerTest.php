@@ -10,6 +10,8 @@ use DomainException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
+use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Lock\Store\InMemoryStore;
 use ValueError;
 
 class JobStatusManagerTest extends TestCase
@@ -20,7 +22,7 @@ class JobStatusManagerTest extends TestCase
     protected function setUp(): void
     {
         $this->cache = new ArrayAdapter();
-        $this->manager = new JobStatusManager($this->cache, 3600);
+        $this->manager = new JobStatusManager($this->cache, new LockFactory(new InMemoryStore()), 3600);
     }
 
     public function testItCreatesJobWithPendingStatusAndTimestamp(): void
@@ -231,7 +233,7 @@ class JobStatusManagerTest extends TestCase
             ->with(JobStatusManager::KEY_PREFIX . 'locked-job', JobStatusManager::LOCK_TTL)
             ->willReturn($lock);
 
-        $manager = new JobStatusManager($this->cache, 3600, $lockFactory);
+        $manager = new JobStatusManager($this->cache, $lockFactory, 3600);
         $manager->createJob('locked-job');
 
         $manager->updateJob('locked-job', [
@@ -258,7 +260,7 @@ class JobStatusManagerTest extends TestCase
             ->method('createLock')
             ->willReturn($lock);
 
-        $manager = new JobStatusManager($this->cache, 3600, $lockFactory);
+        $manager = new JobStatusManager($this->cache, $lockFactory, 3600);
         $manager->createJob('locked-job-fail');
 
         $this->expectException(DomainException::class);
