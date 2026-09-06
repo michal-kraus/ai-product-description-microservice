@@ -102,4 +102,29 @@ class OllamaClientTest extends TestCase
         $ollamaClient = new OllamaClient(new MockHttpClient(), self::TEST_OLLAMA_URL, model: 'custom-model');
         $this->assertSame('custom-model', $ollamaClient->getModel());
     }
+
+    public function testItThrowsOnTimeout(): void
+    {
+        $mockResponse = new MockResponse('', [
+            'error' => 'Connection timed out after 60 seconds.',
+        ]);
+        $httpClient = new MockHttpClient($mockResponse);
+        $ollamaClient = new OllamaClient($httpClient, self::TEST_OLLAMA_URL);
+
+        $this->expectException(Throwable::class);
+        $ollamaClient->generateDescription(new DescriptionRequest('Test', 'Features', 'Test prompt'));
+    }
+
+    public function testItThrowsOnMalformedJson(): void
+    {
+        $mockResponse = new MockResponse('{invalid_json_stream', [
+            'http_code' => 200,
+            'response_headers' => ['Content-Type' => 'application/json'],
+        ]);
+        $httpClient = new MockHttpClient($mockResponse);
+        $ollamaClient = new OllamaClient($httpClient, self::TEST_OLLAMA_URL);
+
+        $this->expectException(Throwable::class);
+        $ollamaClient->generateDescription(new DescriptionRequest('Test', 'Features', 'Test prompt'));
+    }
 }
