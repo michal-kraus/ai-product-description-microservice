@@ -110,19 +110,26 @@ flowchart TD
 
 ## 📖 API Documentation
 
-> 🌐 **Interactive Swagger UI**: Available at **`http://localhost:8000/api/docs`**  
-> 📄 **OpenAPI Specification**: [`openapi.yaml`](openapi.yaml) (OpenAPI 3.1)
+> 🌐 **Interactive Swagger UI**: available at **`http://localhost:8000/api/docs`**  
+> 📄 **Specification file**: [`openapi.yaml`](openapi.yaml) (OpenAPI 3.1)
+
+### Authentication
+
+The microservice uses Symfony's native stateless `access_token` Bearer authentication. Protected endpoints require a valid token provided via:
+- **Authorization header**: `Authorization: Bearer <API_KEY>`
+
+API keys are configured via the `APP_API_KEYS` environment variable supporting `client:key` mapping (e.g. `ecommerce-app:secret-key-1,warehouse:secret-key-2`). Rate limits are tracked independently per authenticated client identifier.
 
 ### Endpoints
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/health` | Lightweight service liveness probe (`{"status": "ok"}`) |
-| `GET` | `/ready` | Service readiness check (verifies Redis and AI provider availability) |
-| `POST` | `/product/descriptions/sync` | Synchronous product description generation |
-| `POST` | `/product/descriptions/async` | Asynchronous job dispatch (returns UUIDv7 `job_id`) |
-| `GET` | `/product/descriptions/async/{jobId}` | Poll status of an async generation job (rate-limited) |
-| `GET` | `/api/docs` | Interactive Swagger UI documentation |
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/health` | Public | Lightweight service liveness probe (`{"status": "ok"}`) |
+| `GET` | `/ready` | Public | Service readiness check (verifies Redis and AI provider availability) |
+| `POST` | `/product/descriptions/sync` | Protected | Synchronous product description generation |
+| `POST` | `/product/descriptions/async` | Protected | Asynchronous job dispatch (returns UUIDv7 `job_id`) |
+| `GET` | `/product/descriptions/async/{jobId}` | Protected | Poll status of an async generation job (rate-limited) |
+| `GET` | `/api/docs` | Public | Interactive Swagger UI documentation |
 
 ---
 
@@ -131,6 +138,7 @@ flowchart TD
 #### 1. Synchronous Generation
 ```bash
 curl -X POST http://localhost:8000/product/descriptions/sync \
+  -H "Authorization: Bearer default-test-api-key-12345" \
   -H "Content-Type: application/json" \
   -d '{"name": "Laptop Pro 16", "features": "16GB RAM, SSD 1TB, 16-inch IPS screen"}'
 ```
@@ -143,6 +151,7 @@ curl -X POST http://localhost:8000/product/descriptions/sync \
 #### 2. Asynchronous Job Dispatch
 ```bash
 curl -X POST http://localhost:8000/product/descriptions/async \
+  -H "Authorization: Bearer default-test-api-key-12345" \
   -H "Content-Type: application/json" \
   -d '{"name": "Galaxy Smartphone X", "features": "6.7 AMOLED, 256GB, 108MP camera"}'
 ```
@@ -155,7 +164,8 @@ curl -X POST http://localhost:8000/product/descriptions/async \
 
 #### 3. Poll Async Job Status
 ```bash
-curl http://localhost:8000/product/descriptions/async/0195669f-1a2b-7c4d-8e5f-6a7b8c9d0e1f
+curl http://localhost:8000/product/descriptions/async/0195669f-1a2b-7c4d-8e5f-6a7b8c9d0e1f \
+  -H "Authorization: Bearer default-test-api-key-12345"
 ```
 ```json
 {

@@ -91,6 +91,8 @@ paths:
         Results are cached in Redis (TTL: 600s).
       tags:
         - Product Descriptions
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -123,6 +125,14 @@ paths:
                 $ref: '#/components/schemas/ValidationError'
               example:
                 error: 'Missing or empty required parameters: "name" and "features" are required.'
+        '401':
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+              example:
+                error: 'Authentication required. Missing or invalid API key.'
         '429':
           description: Rate limit exceeded
           content:
@@ -150,6 +160,8 @@ paths:
         Messages are processed asynchronously via Symfony Messenger (Redis or RabbitMQ AMQP transport).
       tags:
         - Product Descriptions
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -178,6 +190,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+              example:
+                error: 'Authentication required. Missing or invalid API key.'
         '429':
           description: Rate limit exceeded
           content:
@@ -208,6 +228,8 @@ paths:
         When status is `failed`, the `error` field contains the failure reason.
       tags:
         - Product Descriptions
+      security:
+        - BearerAuth: []
       parameters:
         - name: jobId
           in: path
@@ -247,6 +269,14 @@ paths:
                     status: failed
                     description: null
                     error: 'Job execution failed after all retry attempts.'
+        '401':
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+              example:
+                error: 'Authentication required. Missing or invalid API key.'
         '404':
           description: Job not found
           content:
@@ -266,6 +296,12 @@ paths:
                 error: 'Too many status check requests. Please try again later.'
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: API Key passed as HTTP Bearer token
+
   schemas:
     ProductDescriptionRequest:
       type: object
@@ -382,6 +418,20 @@ components:
           type: string
         job_id:
           type: string
+
+    UnauthorizedError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: 'Authentication required. Missing or invalid API key.'
+
+    ForbiddenError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: 'Access denied.'
 
 tags:
   - name: Health

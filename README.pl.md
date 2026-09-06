@@ -113,16 +113,23 @@ flowchart TD
 > 🌐 **Interaktywny Swagger UI**: dostępny pod adresem **`http://localhost:8000/api/docs`**  
 > 📄 **Plik specyfikacji**: [`openapi.yaml`](openapi.yaml) (OpenAPI 3.1)
 
+### Uwierzytelnianie
+
+Mikroserwis wykorzystuje natywne, bezstanowe uwierzytelnianie Symfony `access_token` (Bearer). Chronione endpointy wymagają przekazania poprawnego tokenu w nagłówku:
+- **Nagłówek Authorization**: `Authorization: Bearer <API_KEY>`
+
+Klucze konfigurowane są przez zmienną środowiskową `APP_API_KEYS` w formacie mapowania `klient:klucz` (np. `ecommerce-app:secret-key-1,magazyn:secret-key-2`). Limity zapytań (rate limits) są naliczane i izolowane niezależnie dla każdego uwierzytelnionego identyfikatora klienta.
+
 ### Endpointy
 
-| Metoda | Ścieżka | Opis |
-|---|---|---|
-| `GET` | `/health` | Szybki liveness probe serwisu (`{"status": "ok"}`) |
-| `GET` | `/ready` | Sprawdzenie gotowości i zależności (Redis, AI provider) |
-| `POST` | `/product/descriptions/sync` | Synchroniczne wygenerowanie opisu produktu |
-| `POST` | `/product/descriptions/async` | Zlecenie asynchronicznego generowania (zwraca UUIDv7 `job_id`) |
-| `GET` | `/product/descriptions/async/{jobId}` | Odpytanie o status zadania asynchronicznego (rate-limited) |
-| `GET` | `/api/docs` | Interaktywna dokumentacja Swagger UI |
+| Metoda | Ścieżka | Auth | Opis |
+|---|---|---|---|
+| `GET` | `/health` | Publiczny | Szybki liveness probe serwisu (`{"status": "ok"}`) |
+| `GET` | `/ready` | Publiczny | Sprawdzenie gotowości i zależności (Redis, AI provider) |
+| `POST` | `/product/descriptions/sync` | Chroniony | Synchroniczne wygenerowanie opisu produktu |
+| `POST` | `/product/descriptions/async` | Chroniony | Zlecenie asynchronicznego generowania (zwraca UUIDv7 `job_id`) |
+| `GET` | `/product/descriptions/async/{jobId}` | Chroniony | Odpytanie o status zadania asynchronicznego (rate-limited) |
+| `GET` | `/api/docs` | Publiczny | Interaktywna dokumentacja Swagger UI |
 
 ---
 
@@ -131,6 +138,7 @@ flowchart TD
 #### 1. Synchroniczne generowanie opisu
 ```bash
 curl -X POST http://localhost:8000/product/descriptions/sync \
+  -H "Authorization: Bearer default-test-api-key-12345" \
   -H "Content-Type: application/json" \
   -d '{"name": "Laptop Pro 16", "features": "16GB RAM, SSD 1TB, ekran 16 cali IPS"}'
 ```
@@ -143,6 +151,7 @@ curl -X POST http://localhost:8000/product/descriptions/sync \
 #### 2. Asynchroniczne zlecenie zadania
 ```bash
 curl -X POST http://localhost:8000/product/descriptions/async \
+  -H "Authorization: Bearer default-test-api-key-12345" \
   -H "Content-Type: application/json" \
   -d '{"name": "Smartfon Galaxy X", "features": "Ekran 6.7 AMOLED, 256GB, aparat 108MP"}'
 ```
@@ -155,7 +164,8 @@ curl -X POST http://localhost:8000/product/descriptions/async \
 
 #### 3. Sprawdzenie statusu zadania
 ```bash
-curl http://localhost:8000/product/descriptions/async/0195669f-1a2b-7c4d-8e5f-6a7b8c9d0e1f
+curl http://localhost:8000/product/descriptions/async/0195669f-1a2b-7c4d-8e5f-6a7b8c9d0e1f \
+  -H "Authorization: Bearer default-test-api-key-12345"
 ```
 ```json
 {
