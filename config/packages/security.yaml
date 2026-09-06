@@ -1,0 +1,20 @@
+security:
+    providers:
+        users_in_memory: { memory: null }
+
+    firewalls:
+        dev:
+            pattern: ^/(_profiler|_wdt|assets|build)/
+            security: false
+        main:
+            stateless: true
+            lazy: true
+            provider: users_in_memory
+            access_token:
+                token_handler: App\Security\AccessTokenHandler
+
+    access_control:
+        - { path: ^/health, roles: PUBLIC_ACCESS }
+        - { path: ^/ready, roles: PUBLIC_ACCESS }
+        - { path: ^/api/docs, roles: PUBLIC_ACCESS }
+        - { path: ^/product/descriptions, roles: ROLE_API_USER }

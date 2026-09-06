@@ -156,11 +156,13 @@ final class ProductDescriptionController extends AbstractController
         string $warningLog,
         string $errorMessage,
     ): ?JsonResponse {
-        $limiter = $limiterFactory->create($request->getClientIp() ?? 'anonymous');
+        $clientIdentifier = $this->getUser()?->getUserIdentifier() ?? $request->getClientIp() ?? 'anonymous';
+        $limiter = $limiterFactory->create($clientIdentifier);
 
         if (!$limiter->consume()->isAccepted()) {
             $this->logger->warning($warningLog, [
                 'request_id' => $this->extractRequestId($request),
+                'client' => $this->getUser()?->getUserIdentifier(),
                 'ip' => $request->getClientIp(),
             ]);
 

@@ -16,6 +16,7 @@ parameters:
     env(GEMINI_MODEL): 'gemini-3.1-flash-lite-preview'
     env(GEMINI_BASE_URL): 'https://generativelanguage.googleapis.com/v1beta/interactions'
     env(AI_PROMPT_TEMPLATE): "Jesteś copywriterem e-commerce. Napisz krótki i atrakcyjny opis produktu po polsku:\nNazwa: {name}\nCechy: {features}"
+    env(APP_API_KEYS): 'default-client:default-test-api-key-12345'
 
 services:
     # default configuration for services in *this* file
@@ -65,3 +66,7 @@ services:
     App\Service\ProductDescriptionGenerator:
         arguments:
             $provider: '%env(AI_PROVIDER)%'
+
+    App\Security\AccessTokenHandler:
+        arguments:
+            $apiKeysConfig: '%env(APP_API_KEYS)%'

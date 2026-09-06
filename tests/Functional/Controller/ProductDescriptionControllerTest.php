@@ -31,6 +31,7 @@ final class ProductDescriptionControllerTest extends WebTestCase
         parent::setUp();
 
         $this->client = static::createClient();
+        $this->client->setServerParameter('HTTP_AUTHORIZATION', 'Bearer default-test-api-key-12345');
 
         $router = static::getContainer()->get('router');
         self::assertInstanceOf(RouterInterface::class, $router);
