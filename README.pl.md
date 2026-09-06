@@ -75,7 +75,7 @@ flowchart TD
     Handler --> Generator
     Handler -. "Zdarzenie ostatecznego błędu" .-> JobListener --> JobManager
 
-    Generator <-->|"Sprawdź / Zapisz cache (SHA-256 Multi-Factor)"| RedisCache
+    Generator <-->|"Sprawdź / Zapisz cache (xxh128 Multi-Factor)"| RedisCache
     Generator --> Strategy
 
     Factory -. "Tworzy instancję" .-> Strategy
@@ -97,7 +97,8 @@ flowchart TD
 - **Builder Pattern** — `PromptBuilder` z dynamicznie konfigurowalnym szablonem promptu
 - **Sliding Window Rate Limiter** — ochrona API generowania (30 req/min) i odpytywania o status (120 req/min) z dedykowaną pulą cache
 - **Transport-Agnostic Async Queues** — asynchroniczne kolejki wiadomości przez Symfony Messenger z możliwością wyboru brokera: **Redis** lub **RabbitMQ (AMQP)** wraz ze strategią ponowień (retry strategy) oraz dead-letter handling
-- **Multi-factor Cache** — wersjonowany, wieloskładnikowy klucz SHA-256 oparty o providera, model, hash promptu i cechy (TTL: 600s)
+- **Wieloskładnikowy Cache z Wersjonowaniem** — szybkie, odporne na kolizje hashowanie xxh128 w Redis dla wygenerowanych opisów w oparciu o wersję cache, providera, model, prompt i cechy (TTL: 600s)
+- **Korelacja żądań i obserwowalność (Observability)** — śledzenie żądań end-to-end za pomocą nagłówka `X-Request-ID` (UUID v7), propagowanego w nagłówkach HTTP, kopertach asynchronicznych wiadomości Messengera oraz w logach
 
 ---
 
@@ -206,13 +207,15 @@ Dla wygody programisty przygotowano zestaw skrótów `make`:
 
 ```bash
 make help        # Wyświetla listę wszystkich dostępnych poleceń
-make check       # Uruchamia pełny zestaw weryfikacyjny (lint + stan + testy z coverage)
+make check       # Uruchamia pełny zestaw weryfikacyjny (lint + cs + stan + coverage)
 make test        # Uruchamia testy PHPUnit
 make coverage    # Uruchamia testy z tabelą pokrycia kodu (PCOV)
 make stan        # Uruchamia analizę statyczną PHPStan (Level 8)
 make lint        # Waliduje pliki YAML i kontener Dependency Injection
-make up          # Uruchamia kontenery Docker (Redis, RabbitMQ, Ollama, App, Worker)
-make down        # Zatrzymuje kontenery Docker
+make cs          # Sprawdza standardy kodowania (PHP-CS-Fixer, dry-run)
+make cs-fix      # Automatycznie naprawia standardy kodowania (PHP-CS-Fixer)
+make up          # Uruchamia kontenery Dockera w tle
+make down        # Zatrzymuje kontenery Dockera
 make worker      # Uruchamia konsumenta wiadomości Messenger (async)
 ```
 
@@ -233,8 +236,9 @@ make up
 ```
 > Uruchomione usługi:
 > - **Redis** na porcie `6379`
-> - **RabbitMQ** na porcie `5672` (Panel zarządzania UI: `http://localhost:15672` — login/hasło: `guest`/`guest`)
 > - **Ollama** na porcie `21434`
+> - **RedisInsight** na porcie `5540` (narzędzie GUI do podglądu danych w Redis)
+> - **RabbitMQ** na porcie `5672` (Panel zarządzania UI: `http://localhost:15672` — login/hasło: `guest`/`guest`, wymaga `COMPOSE_PROFILES=rabbitmq` lub `--profile rabbitmq`)
 
 ### 3. Pobranie lokalnego modelu AI (Ollama)
 ```bash
@@ -315,10 +319,15 @@ src/
 │   └── GenerateProductDescriptionCommand.php # Konsolowa komenda CLI
 ├── Controller/
 │   ├── ApiDocsController.php             # Swagger UI oraz specyfikacja OpenAPI
-│   ├── HealthCheckController.php         # Endpoint monitoringu /health
+│   ├── HealthCheckController.php         # Endpointy monitoringu /health i /ready
 │   └── ProductDescriptionController.php  # REST API endpointy (sync & async)
+├── DTO/
+│   └── GenerateProductDescriptionRequest.php # Walidowany obiekt DTO żądania HTTP
 ├── Enum/
 │   └── GenerateProductDescriptionMessageStatus.php # Maszyna stanów zadania
+├── EventListener/
+│   ├── JobFailedListener.php             # Listener trwałych błędów workera Messengera
+│   └── RequestIdListener.php             # Listener korelacji żądań HTTP (X-Request-ID)
 ├── Exception/
 │   └── ProductDescriptionGenerationException.php   # Dedykowany wyjątek domenowy
 ├── Message/

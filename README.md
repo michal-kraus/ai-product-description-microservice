@@ -75,7 +75,7 @@ flowchart TD
     Handler --> Generator
     Handler -. "Permanent Failure Event" .-> JobListener --> JobManager
 
-    Generator <-->|"Check / Store Cache (SHA-256 Multi-Factor)"| RedisCache
+    Generator <-->|"Check / Store Cache (xxh128 Multi-Factor)"| RedisCache
     Generator --> Strategy
 
     Factory -. "Instantiates" .-> Strategy
@@ -97,7 +97,8 @@ flowchart TD
 - **Builder Pattern** — `PromptBuilder` for customizable, decoupled prompt templates.
 - **Sliding Window Rate Limiter** — Sliding window algorithm for both generation (30 req/min) and status polling (120 req/min) with isolated cache storage.
 - **Transport-Agnostic Async Queues** — Non-blocking message dispatch via Symfony Messenger with hot-swappable queue drivers: **Redis** or **RabbitMQ (AMQP)** with automatic retry strategy and dead-letter handling.
-- **Multi-factor Versioned Caching** — Collision-resistant SHA-256 Redis caching of generated descriptions based on provider, model, prompt hash, and input features (TTL: 600s).
+- **Multi-factor Versioned Caching** — Fast, collision-resistant xxh128 Redis caching of generated descriptions based on cache version, provider, model, prompt, and input features (TTL: 600s).
+- **Request Correlation & Observability** — End-to-end distributed tracing via `X-Request-ID` header (UUID v7) propagated across HTTP requests, responses, async Messenger envelopes, and structured log contexts.
 
 ---
 
@@ -206,12 +207,14 @@ Developer shortcuts for common tasks:
 
 ```bash
 make help        # Displays available commands
-make check       # Runs full verification suite (lint + stan + test with coverage)
+make check       # Runs full verification suite (lint + cs + stan + coverage)
 make test        # Runs PHPUnit test suite
 make coverage    # Runs PHPUnit with PCOV line coverage table
 make stan        # Runs PHPStan static analysis (Level 8)
 make lint        # Validates YAML files and Dependency Injection container
-make up          # Starts Docker containers (Redis, RabbitMQ, Ollama, App, Worker)
+make cs          # Checks coding standards (PHP-CS-Fixer, dry-run)
+make cs-fix      # Fixes coding standards automatically (PHP-CS-Fixer)
+make up          # Starts Docker containers in the background
 make down        # Stops Docker containers
 make worker      # Starts Symfony Messenger async queue consumer
 ```
@@ -233,8 +236,9 @@ make up
 ```
 > Services started:
 > - **Redis** on `6379`
-> - **RabbitMQ** on `5672` (Management UI: `http://localhost:15672` — user/pass: `guest`/`guest`)
 > - **Ollama** on `21434`
+> - **RedisInsight** on `5540` (GUI for Redis cache inspection)
+> - **RabbitMQ** on `5672` (Management UI: `http://localhost:15672` — user/pass: `guest`/`guest`, requires `COMPOSE_PROFILES=rabbitmq` or `--profile rabbitmq`)
 
 ### 3. Pull Local AI Model (Ollama)
 ```bash
@@ -315,10 +319,15 @@ src/
 │   └── GenerateProductDescriptionCommand.php # Symfony CLI console command
 ├── Controller/
 │   ├── ApiDocsController.php             # Swagger UI and OpenAPI YAML endpoint
-│   ├── HealthCheckController.php         # /health monitoring endpoint
+│   ├── HealthCheckController.php         # /health and /ready monitoring endpoints
 │   └── ProductDescriptionController.php  # REST API endpoints (sync & async)
+├── DTO/
+│   └── GenerateProductDescriptionRequest.php # Validated HTTP input request DTO
 ├── Enum/
 │   └── GenerateProductDescriptionMessageStatus.php # State machine enum
+├── EventListener/
+│   ├── JobFailedListener.php             # Messenger permanent failure listener
+│   └── RequestIdListener.php             # Request correlation ID (X-Request-ID) listener
 ├── Exception/
 │   └── ProductDescriptionGenerationException.php   # Domain-specific exception
 ├── Message/
